@@ -10,9 +10,10 @@ class DDA;
 class GCodeBuffer;
 
 enum class MotionDeviceType : uint8_t {
-	local = 0,
-	can = 1,
-	moteus = 2 //will be implemented in a later sprint, used to test rejection
+	none = 0,
+	local = 1,
+	can = 2,
+	moteus = 3 //will be implemented in a later sprint, used to test rejection
 };
 
 class MotionDeviceInterface {
