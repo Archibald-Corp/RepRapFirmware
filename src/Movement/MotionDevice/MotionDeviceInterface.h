@@ -31,8 +31,8 @@ public:
 	virtual MotionDeviceType GetType() const noexcept = 0;																						// which backend kind
 	virtual const char *_ecv_array GetName() const noexcept = 0;																				// name for diagnostics
 	virtual void StartMovement() noexcept {};																									// begin a move (default: nothing)
-	virtual void AddAxisMovement (Move&, const PrepParams&, uint32_t startTime, size_t logicalDrive, DriverId, int32_t delta, MovementFlags) noexcept = 0;	// execute one axis's motion
-	virtual void AddExtruderMovement (Move&, const PrepParams&, uint32_t startTime, size_t logicalDrive, DriverId, motioncalc_t delta, bool usePressureAdvance, MovementFlags) noexcept = 0;	// execute one extruder's motion
+	virtual void AddAxisMovement(const PrepParams& params, DriverId driver, int32_t delta) noexcept = 0;										// execute one axis's motion | execution only tracking is shared 
+	virtual void AddExtruderMovement(const PrepParams& params, DriverId driver, motioncalc_t delta, bool usePressureAdvance) noexcept = 0;		// execute one extruder's motion | execution only tracking is shared
 	virtual uint32_t FinishMovement (const DDA&, uint32_t moveStartTime, bool simulating) noexcept { return 0; };								// commit move, return duration in clocks
 	virtual void EnableDriver (Move&, DriverId, float requiredCurrent) noexcept = 0;																// energize a motor
 	virtual void DisableDriver (Move&, DriverId) noexcept = 0;																					// de-energize a motor

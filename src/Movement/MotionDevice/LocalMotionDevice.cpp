@@ -11,12 +11,16 @@ const char *_ecv_array LocalMotionDevice::GetName() const noexcept {
     return "local";
 }
 
-void LocalMotionDevice::AddAxisMovement(Move& move, const PrepParams& params, uint32_t startTime, size_t logicalDrive, DriverId drive, int32_t delta, MovementFlags moveFlags) noexcept {
-    move.AddLinearSegments(logicalDrive, startTime, params, (motioncalc_t) delta, moveFlags);
+void LocalMotionDevice::AddAxisMovement(const PrepParams&, DriverId, int32_t) noexcept {
+    // No-op: local axis motion is produced by the shared Move::AddLinearSegments call in DDA::Prepare,
+    // which both drives the local motors and tracks position. Nothing backend-specific to do per driver.
+    // This lets the interface separate batching from local calls
 }
 
-void LocalMotionDevice::AddExtruderMovement(Move& move, const PrepParams& params, uint32_t startTime, size_t logicalDrive, DriverId drive, motioncalc_t delta, bool usePressureAdvance, MovementFlags segFlags) noexcept {
-    move.AddLinearSegments(logicalDrive, startTime, params, delta, segFlags.AddIsExtruder());
+void LocalMotionDevice::AddExtruderMovement(const PrepParams&, DriverId, motioncalc_t, bool) noexcept {
+    // No-op: local axis motion is produced by the shared Move::AddLinearSegments call in DDA::Prepare,
+    // which both drives the local motors and tracks position. Nothing backend-specific to do per driver.
+    // This lets the interface separate batching from local calls
 }
 
 void LocalMotionDevice::EnableDriver (Move& move, DriverId drive, float requiredCurrent) noexcept {
