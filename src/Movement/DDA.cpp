@@ -14,6 +14,8 @@
 #include <Endstops/EndstopsManager.h>
 #include <Tools/Tool.h>
 #include <GCodes/GCodes.h>
+#include <Movement/MotionDevice/MotionDeviceInterface.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #if SUPPORT_CAN_EXPANSION
 # include <CAN/CanMotion.h>
@@ -1272,7 +1274,7 @@ void DDA::Prepare(DDARing& ring,
 	if (simMode < SimulationMode::normal)
 	{
 #if SUPPORT_CAN_EXPANSION
-		CanMotion::StartMovement();
+		MotionDeviceFactory::GetDevice(MotionDeviceType::can).StartMovement();
 #endif
 		// Handle all drivers
 		if (flags.isLeadscrewAdjustmentMove)
@@ -1351,10 +1353,7 @@ void DDA::Prepare(DDARing& ring,
 						for (size_t i = 0; i < config.numDrivers; ++i)
 						{
 							const DriverId driver = config.driverNumbers[i];
-							if (driver.IsRemote())
-							{
-								CanMotion::AddAxisMovement(params, driver, delta);
-							}
+							MotionDeviceFactory::ResolveDriver(driver).AddAxisMovement(params, driver, delta);
 						}
 #endif
 						axisMotorsEnabled.SetBit(drive);
@@ -1399,11 +1398,8 @@ void DDA::Prepare(DDARing& ring,
 
 #if SUPPORT_CAN_EXPANSION
 							const DriverId driver = move.GetExtruderDriver(extruder);
-							if (driver.IsRemote())
-							{
-								// The MovementLinearShaped message requires the extrusion amount in steps to be passed as a float. The remote board adds the PA and handles fractional steps.
-								CanMotion::AddExtruderMovement(params, driver, (float)delta, flags.usePressureAdvance);
-							}
+							// The MovementLinearShaped message requires the extrusion amount in steps to be passed as a float (This is now done in the interface layer). The remote board adds the PA and handles fractional steps.
+							MotionDeviceFactory::ResolveDriver(driver).AddExtruderMovement(params, driver, delta, flags.usePressureAdvance);
 #endif
 							afterPrepare.drivesMoving.SetBit(drive);
 						}
@@ -1441,7 +1437,7 @@ void DDA::Prepare(DDARing& ring,
 		}
 
 #if SUPPORT_CAN_EXPANSION
-		const uint32_t canClocksNeeded = CanMotion::FinishMovement(*this, afterPrepare.moveStartTime, simMode != SimulationMode::off);
+		const uint32_t canClocksNeeded = MotionDeviceFactory::GetDevice(MotionDeviceType::can).FinishMovement(*this, afterPrepare.moveStartTime, simMode != SimulationMode::off);
 		if (canClocksNeeded > clocksNeeded)
 		{
 			// Due to rounding error in the calculations, we quite often calculate the CAN move as being longer than our previously-calculated value, normally by just one clock.
