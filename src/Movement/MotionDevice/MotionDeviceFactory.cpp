@@ -16,8 +16,8 @@ namespace
         const char *_ecv_array GetName() const noexcept override {
             return "none";
         }
-        void AddAxisMovement(Move&, const PrepParams&, uint32_t, size_t, DriverId, int32_t, MovementFlags) noexcept override {}
-        void AddExtruderMovement(Move&, const PrepParams&, uint32_t, size_t, DriverId, motioncalc_t, bool, MovementFlags) noexcept override {}
+        void AddAxisMovement(const PrepParams& params, DriverId driver, int32_t delta) noexcept override {}
+        void AddExtruderMovement(const PrepParams& params, DriverId driver, motioncalc_t delta, bool usePressureAdvance) noexcept override {}
         void EnableDriver(Move&, DriverId, float) noexcept override {}
         void DisableDriver(Move&, DriverId) noexcept override {}
         GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) override {

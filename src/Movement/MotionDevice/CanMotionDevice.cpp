@@ -19,14 +19,12 @@ void CanMotionDevice::StartMovement() noexcept {
     CanMotion::StartMovement();
 }
 
-void CanMotionDevice::AddAxisMovement (Move& move, const PrepParams& params, uint32_t startTime, size_t logicalDrive, DriverId driver, int32_t delta, MovementFlags moveFlags) noexcept {
-    move.AddLinearSegments(logicalDrive, startTime, params, (motioncalc_t) delta, moveFlags); //shadow tracking
-    CanMotion::AddAxisMovement(params, driver, delta);
+void CanMotionDevice::AddAxisMovement (const PrepParams& params, DriverId driver, int32_t delta) noexcept {
+    CanMotion::AddAxisMovement(params, driver, delta); //shadow tracking is in DDA:Prepare
 }
 
-void CanMotionDevice::AddExtruderMovement(Move& move, const PrepParams& params, uint32_t startTime, size_t logicalDrive, DriverId driver, motioncalc_t delta, bool usePressureAdvance, MovementFlags segFlags) noexcept {
-    move.AddLinearSegments(logicalDrive, startTime, params, delta, segFlags.AddIsExtruder()); //shadow tracking
-    CanMotion::AddExtruderMovement(params, driver, (float) delta, usePressureAdvance);
+void CanMotionDevice::AddExtruderMovement(const PrepParams& params, DriverId driver, motioncalc_t delta, bool usePressureAdvance) noexcept {
+    CanMotion::AddExtruderMovement(params, driver, (float) delta, usePressureAdvance); //shadow tracking is in DDA:Prepare
 }
 
 uint32_t CanMotionDevice::FinishMovement (const DDA& dda, uint32_t moveStartTime, bool simulating) noexcept {
