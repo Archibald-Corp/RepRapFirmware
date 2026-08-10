@@ -55,4 +55,8 @@ void CanMotionDevice::StopDriver (DriverId driver, int32_t netStepsTaken) noexce
     (void)CanMotion::StopDriverWhenExecuting(driver, netStepsTaken);		// return value (whether the driver was stopped) is not needed here
 }
 
+bool CanMotionDevice::RevertStoppedDrivers() noexcept {
+    return CanMotion::RevertStoppedDrivers();
+}
+
 #endif /* SUPPORT_CAN_EXPANSION */

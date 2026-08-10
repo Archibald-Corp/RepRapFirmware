@@ -38,6 +38,7 @@ public:
 	virtual void DisableDriver (Move&, DriverId) noexcept = 0;																					// de-energize a motor
 	virtual GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) = 0;						// handle M569 for this driver
 	virtual void StopDriver (DriverId, int32_t netStepsTaken) noexcept = 0;																		// stop a motor mid-move (homing)
+	virtual bool RevertStoppedDrivers() noexcept { return true; }																				//default is nothing to revert
 };
 
 #endif /*SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEINTERFACE_H_*/

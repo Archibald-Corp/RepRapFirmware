@@ -17,6 +17,7 @@ public:
 	void DisableDriver (Move&, DriverId) noexcept override;
 	GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) override;
 	void StopDriver (DriverId, int32_t netStepsTaken) noexcept override;
+	bool RevertStoppedDrivers() noexcept override;
 };
 
 #endif /* SUPPORT_CAN_EXPANSION */
