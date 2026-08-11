@@ -12,6 +12,7 @@
 #include "GCodeBuffer/GCodeBuffer.h"
 #include <Heating/Heat.h>
 #include <Movement/Move.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 #include <Platform/RepRap.h>
 #include <Platform/Event.h>
 #include <Tools/Tool.h>
@@ -1012,34 +1013,8 @@ GCodeResult GCodes::ConfigureDriver(GCodeBuffer& gb, const StringRef& reply) THR
 	for (size_t i = 0; i < drivesCount; ++i)
 	{
 		DriverId const id = driverIds[i];
-		res =
-#if SUPPORT_CAN_EXPANSION
-			(id.IsRemote())
-				? CanInterface::ConfigureRemoteDriver(id, gb, reply)
-					:
-#endif
-					reprap.GetMove().ConfigureLocalDriver(gb, reply, id.localDriver);
-#if SUPPORT_CAN_EXPANSION
-		// If it's M569 with an S parameter then store the direction setting
-		if (res <= GCodeResult::warning && gb.GetCommandFraction() <= 0 && id.IsRemote())
-		{
-			bool direction;
-			bool seen = false;
-			if (gb.TryGetBValue('S', direction, seen))
-			{
-				reprap.GetExpansion().StoreDriverDirection(id, direction);
-			}
-			uint32_t mode;
-			if (gb.TryGetUIValue('D', mode, seen))
-			{
-				reprap.GetExpansion().StoreDriverMode(id, mode);
-			}
-			if (seen)
-			{
-				reprap.BoardsUpdated();
-			}
-		}
-#endif
+		res = MotionDeviceFactory::ResolveDriver(id).ConfigureDriver(reprap.GetMove(), id, gb, reply); //routes through interface
+				
 		if (res != GCodeResult::ok || (!isSetOfReadings && gb.GetCommandFraction() != 4))
 		{
 			break;
