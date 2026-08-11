@@ -6,6 +6,9 @@
 #include <CAN/CanMotion.h>
 #include <CAN/CanInterface.h>
 #include <CAN/CanDriversData.h>
+#include <Platform/RepRap.h>					// for reprap.GetExpansion() and reprap.BoardsUpdated()
+#include <CAN/ExpansionManager.h>			// for StoreDriverDirection / StoreDriverMode
+#include <GCodes/GCodeBuffer/GCodeBuffer.h>	// for gb.TryGetBValue / TryGetUIValue / GetCommandFraction
 
 MotionDeviceType CanMotionDevice::GetType() const noexcept {
     return MotionDeviceType::can;
@@ -46,7 +49,25 @@ void CanMotionDevice::DisableDriver (Move&, DriverId driver) noexcept {
 }
 
 GCodeResult CanMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException) {
-    return CanInterface::ConfigureRemoteDriver(driver, gb, reply);
+    const GCodeResult res = CanInterface::ConfigureRemoteDriver(driver, gb, reply);
+
+    // If it's M569 with an S parameter then store the direction setting. This backend only handles remote drivers,
+    // so the id.IsRemote() check from the original GCodes code is implied.
+    if (res <= GCodeResult::warning && gb.GetCommandFraction() <= 0) {
+        bool direction;
+        bool seen = false;
+        if (gb.TryGetBValue('S', direction, seen)) {
+            reprap.GetExpansion().StoreDriverDirection(driver, direction);
+        }
+        uint32_t mode;
+        if (gb.TryGetUIValue('D', mode, seen)) {
+            reprap.GetExpansion().StoreDriverMode(driver, mode);
+        }
+        if (seen) {
+            reprap.BoardsUpdated();
+        }
+    }
+    return res;
 }
 
 void CanMotionDevice::StopDriver (DriverId driver, int32_t netStepsTaken) noexcept {
