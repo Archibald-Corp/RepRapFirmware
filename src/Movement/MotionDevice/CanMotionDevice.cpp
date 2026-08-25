@@ -34,18 +34,13 @@ uint32_t CanMotionDevice::FinishMovement (const DDA& dda, uint32_t moveStartTime
     return CanMotion::FinishMovement(dda, moveStartTime, simulating);
 }
 
-void CanMotionDevice::EnableDriver (Move&, DriverId driver, float) noexcept {
+void CanMotionDevice::EnableDriver (Move&, const CanDriversList& drivers, float) noexcept {
     // requiredCurrent is unused here: motor current is set separately over CAN, not by the enable message.
-    // TODO: this sends one message per driver, losing the per-board batching Move::EnableDrivers does currently.
-    CanDriversList list;
-    list.AddEntry(driver);
-    CanInterface::EnableRemoteDrivers(list);
+    CanInterface::EnableRemoteDrivers(drivers);
 }
 
-void CanMotionDevice::DisableDriver (Move&, DriverId driver) noexcept {
-    CanDriversList list;
-    list.AddEntry(driver);
-    CanInterface::DisableRemoteDrivers(list);
+void CanMotionDevice::DisableDriver (Move&, const CanDriversList& drivers) noexcept {
+    CanInterface::DisableRemoteDrivers(drivers);
 }
 
 GCodeResult CanMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException) {

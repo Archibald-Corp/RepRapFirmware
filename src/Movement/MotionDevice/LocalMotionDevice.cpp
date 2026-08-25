@@ -23,12 +23,16 @@ void LocalMotionDevice::AddExtruderMovement(const PrepParams&, DriverId, motionc
     // This lets the interface separate batching from local calls
 }
 
-void LocalMotionDevice::EnableDriver (Move& move, DriverId drive, float requiredCurrent) noexcept {
-    move.EnableOneLocalDriver(drive.localDriver, requiredCurrent);
+void LocalMotionDevice::EnableDriver (Move& move, const CanDriversList& drivers, float requiredCurrent) noexcept {
+    for (size_t i = 0; i < drivers.GetNumEntries(); i++) {
+        move.EnableOneLocalDriver(drivers.GetEntry(i).localDriver, requiredCurrent);
+    }
 }
 
-void LocalMotionDevice::DisableDriver (Move& move, DriverId drive) noexcept {
-    move.DisableOneLocalDriver(drive.localDriver);
+void LocalMotionDevice::DisableDriver (Move& move, const CanDriversList& drivers) noexcept {
+    for (size_t i = 0; i < drivers.GetNumEntries(); i++) {
+        move.DisableOneLocalDriver(drivers.GetEntry(i).localDriver);
+    }
 }
 
 GCodeResult LocalMotionDevice::ConfigureDriver(Move& move, DriverId drive, GCodeBuffer& gb, const StringRef& reply) THROWS (GCodeException) {

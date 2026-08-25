@@ -43,6 +43,7 @@ public:
 	void Clear() noexcept { numEntries = 0; }
 	void AddEntry(DriverId id) noexcept;
 	size_t GetNumEntries() const noexcept { return numEntries; }
+	DriverId GetEntry(size_t index) const noexcept { return drivers[index]; }
 	bool IsEmpty() const noexcept { return numEntries == 0; }
 	CanAddress GetNextBoardDriverBitmap(size_t& startFrom, CanDriversBitmap& driversBitmap) const noexcept;
 

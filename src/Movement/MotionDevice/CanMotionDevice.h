@@ -13,8 +13,8 @@ public:
 	void AddAxisMovement (const PrepParams& params, DriverId driver, int32_t delta) noexcept override;
 	void AddExtruderMovement (const PrepParams& params, DriverId driver, motioncalc_t delta, bool usePressureAdvance) noexcept override;
 	uint32_t FinishMovement (const DDA&, uint32_t moveStartTime, bool simulating) noexcept override;
-	void EnableDriver (Move&, DriverId, float requiredCurrent) noexcept override;
-	void DisableDriver (Move&, DriverId) noexcept override;
+	void EnableDriver (Move&, const CanDriversList& drivers, float requiredCurrent) noexcept override;
+	void DisableDriver (Move&, const CanDriversList& drivers) noexcept override;
 	GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) override;
 	void StopDriver (DriverId, int32_t netStepsTaken) noexcept override;
 	bool RevertStoppedDrivers() noexcept override;
