@@ -45,6 +45,7 @@
 #include <Platform/TaskPriorities.h>
 #include <AppNotifyIndices.h>
 #include "StepperDrivers/SmartDrivers.h"
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #if SUPPORT_IOBITS
 # include <Platform/PortControl.h>
@@ -2688,7 +2689,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 					DriveMovement& dm = dms[hitDetails.axis];
 					if (dm.state >= DMState::firstMotionState)
 					{
-						if (CanMotion::StopDriverWhenExecuting(hitDetails.driver, dm.GetNetStepsTakenThisMove()))
+						if (MotionDeviceFactory::ResolveDriver(hitDetails.driver).StopDriver(hitDetails.driver, dm.GetNetStepsTakenThisMove(), true))
 						{
 							wakeAsyncSender = true;
 						}
@@ -2696,7 +2697,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 				}
 				else
 				{
-					CanMotion::StopDriverWhenProvisional(hitDetails.driver);
+					(void)MotionDeviceFactory::ResolveDriver(hitDetails.driver).StopDriver(hitDetails.driver, 0, false);
 				}
 			}
 			else
@@ -2994,13 +2995,8 @@ bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 						[](uint8_t) noexcept -> void { },						// no action if the driver is local
 						[executingMove, netStepsTaken, &wakeAsyncSender](DriverId did) noexcept -> void
 							{
-								if (executingMove)
-								{
-									if (CanMotion::StopDriverWhenExecuting(did, netStepsTaken)) { wakeAsyncSender = true; }
-								}
-								else
-								{
-									CanMotion::StopDriverWhenProvisional(did);
+								if (MotionDeviceFactory::ResolveDriver(did).StopDriver(did, netStepsTaken, executingMove)) { 
+									wakeAsyncSender = true; 
 								}
 							}
 					  );

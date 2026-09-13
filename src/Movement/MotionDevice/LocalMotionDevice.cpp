@@ -39,10 +39,9 @@ GCodeResult LocalMotionDevice::ConfigureDriver(Move& move, DriverId drive, GCode
     return move.ConfigureLocalDriver(gb, reply, drive.localDriver);
 }
 
-void LocalMotionDevice::StopDriver (DriverId, int32_t) noexcept {
-    // Local drives are stopped inside the step ISR (DriveMovement::StopLogicalDrive via
-    // Move::CheckEndstops), not by an external call, so there is nothing to delegate to here.
-    // TODO: route local stop through this method when the endstop/homing path is refactored.
+bool LocalMotionDevice::StopDriver (DriverId, int32_t, bool) noexcept {
+    //Local drives are stopped inside of the step ISR handled by Move (StopLogicalDrive / the driversCurrentlyUsed bitmap)
+    return false;
 }
 
 

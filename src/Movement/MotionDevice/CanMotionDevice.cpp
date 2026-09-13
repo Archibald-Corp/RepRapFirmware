@@ -65,8 +65,13 @@ GCodeResult CanMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuffer
     return res;
 }
 
-void CanMotionDevice::StopDriver (DriverId driver, int32_t netStepsTaken) noexcept {
-    (void)CanMotion::StopDriverWhenExecuting(driver, netStepsTaken);		// return value (whether the driver was stopped) is not needed here
+bool CanMotionDevice::StopDriver (DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept {
+    if (executingMove) {
+        return CanMotion::StopDriverWhenExecuting(driver, netStepsTaken);
+    } else {
+        CanMotion::StopDriverWhenProvisional(driver);
+        return false;
+    }
 }
 
 bool CanMotionDevice::RevertStoppedDrivers() noexcept {

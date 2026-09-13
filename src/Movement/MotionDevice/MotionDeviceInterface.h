@@ -38,7 +38,7 @@ public:
 	virtual void EnableDriver (Move&, const CanDriversList& drivers, float requiredCurrent) noexcept = 0;																// energize a motor
 	virtual void DisableDriver (Move&, const CanDriversList& drivers) noexcept = 0;																					// de-energize a motor
 	virtual GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) = 0;						// handle M569 for this driver
-	virtual void StopDriver (DriverId, int32_t netStepsTaken) noexcept = 0;																		// stop a motor mid-move (homing)
+	virtual bool StopDriver (DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept = 0;											// stop a motor mid-move (homing) we only deal with remote drives through the interface
 	virtual bool RevertStoppedDrivers() noexcept { return true; }																				//default is nothing to revert
 };
 

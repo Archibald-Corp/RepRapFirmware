@@ -24,7 +24,7 @@ namespace
             reply.copy("driver is not assigned to a supported motion backend");
             return GCodeResult::error;
         }
-        void StopDriver(DriverId, int32_t) noexcept override {}
+        bool StopDriver (DriverId, int32_t, bool) noexcept override { return false; }
     };
 }
 

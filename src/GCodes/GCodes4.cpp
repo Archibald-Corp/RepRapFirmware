@@ -12,6 +12,7 @@
 
 #if SUPPORT_CAN_EXPANSION
 # include <CAN/CanMotion.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 #endif
 
 #if HAS_SBC_INTERFACE
@@ -31,7 +32,7 @@ bool GCodes::WaitForEndstopOrProbingMoveToFinish(GCodeBuffer& gb) noexcept
 {
 	return LockCurrentMovementSystemAndWaitForStandstill(gb)
 #if SUPPORT_CAN_EXPANSION
-			&& CanMotion::RevertStoppedDrivers()
+			&& MotionDeviceFactory::GetDevice(MotionDeviceType::can).RevertStoppedDrivers()
 #endif
 		;
 }
