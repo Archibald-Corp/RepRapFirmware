@@ -2,8 +2,8 @@
  * CanTransport.h
  */
 
-#ifndef SRC_CAN_CANTRANSPORT_H_
-#define SRC_CAN_CANTRANSPORT_H_
+#ifndef SRC_CAN_BUS_CANTRANSPORT_H_
+#define SRC_CAN_BUS_CANTRANSPORT_H_
 
 #include "RepRapFirmware.h"
 
@@ -68,4 +68,4 @@ public:
 
 #endif	// SUPPORT_CAN_EXPANSION
 
-#endif /* SRC_CAN_CANTRANSPORT_H_ */
+#endif /* SRC_CAN_BUS_CANTRANSPORT_H_ */

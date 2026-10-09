@@ -44,7 +44,11 @@
 
 #define SUPPORT_CAN		1				// needed by CanDevice.h
 #include <CanDevice.h>
-#include "CanDeviceTransport.h"
+#include "Bus/CanDeviceTransport.h"
+#if DUAL_CAN
+# include "Bus/SecondaryCanBus.h"
+# include "Bus/SecondaryCanProtocol.h"
+#endif
 #if SAME70
 # include <pmc/pmc.h>
 #endif
@@ -150,28 +154,7 @@ static unsigned int txTimeouts[Can0Config.numTxBuffers + 1] = { 0 };
 static uint32_t lastCancelledId = 0;
 
 #if DUAL_CAN
-
-constexpr CanDevice::Config Can1Config =
-{
-	.dataSize = 8,
-	.numTxBuffers = 2,
-	.txFifoSize = 4,
-	.numRxBuffers =  0,
-	.rxFifo0Size = 16,
-	.rxFifo1Size = 16,
-	.numShortFilterElements = 1,
-	.numExtendedFilterElements = 1,
-	.txEventFifoSize = 16
-};
-
-static_assert(Can1Config.IsValid());
-
-// CAN buffer memory must be in the first 64Kb of RAM (SAME5x) or in non-cached RAM (SAME70), so put it in its own segment
-static uint32_t can1Memory[Can1Config.GetMemorySize()] __attribute__ ((section (".CanMessage")));
-
-static CanDeviceTransport can1Transport(1, SecondaryCanDeviceNumber, Can1Config, can1Memory);
-static CanTransport& can1 = can1Transport;
-
+static SecondaryCanProtocol secondaryProtocol;						// selected at build time, see SecondaryCanProtocol.h
 #endif
 
 // Transmit buffer usage. All dedicated buffer numbers must be < Can0Config.numTxBuffers.
@@ -330,11 +313,7 @@ void CanInterface::Init() noexcept
 	canReceiverTask.Create(CanReceiverLoop, "CanReceiver", nullptr, TaskPriority::CanReceiverPriority);
 
 #if DUAL_CAN
-	timing.SetDefaults(250'000);
-	can1.Init(timing);
-	can1.SetShortFilter(0, CanRxQueue::fifo0, 0, 0);			// set up a filter to receive all messages in FIFO 0
-	can1.SetExtendedFilter(0, CanRxQueue::fifo0, 0, 0);
-	can1.Enable();
+	(void)SecondaryCanBus::Init(secondaryProtocol);
 #endif
 }
 
@@ -923,12 +902,14 @@ void CanInterface::SendMessageNoReplyNoFree(CanMessageBuffer *buf) noexcept
 
 uint32_t CanInterface::SendPlainMessageNoFree(CanMessageBuffer *buf, uint32_t timeout) noexcept
 {
-	return can1.IsActive() ? can1.Send(CanTxSlot::fifo, timeout, buf) : 0;
+	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+	return (bus != nullptr) ? bus->Send(CanTxSlot::fifo, timeout, buf) : 0;
 }
 
 bool CanInterface::ReceivePlainMessage(CanMessageBuffer *_ecv_null buf, uint32_t timeout) noexcept
 {
-	return can1.IsActive() && can1.Receive(CanRxQueue::fifo0, timeout, buf);
+	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+	return bus != nullptr && bus->Receive(CanRxQueue::fifo0, timeout, buf);
 }
 
 #endif
@@ -1894,10 +1875,15 @@ CanId CanInterface::ODrive::ArbitrationId(DriverId driver, uint8_t cmd) noexcept
 CanMessageBuffer *_ecv_null CanInterface::ODrive::PrepareSimpleMessage(DriverId const driver, const StringRef& reply) noexcept
 {
 	// Detect any early return conditions
-	if (!can1.IsActive())
+#if SECONDARY_CAN_PROTOCOL != SECONDARY_CAN_PROTOCOL_ODRIVE
+	reply.copy("secondary CAN bus is not configured for ODrive");
+	return nullptr;
+#else
+	if (SecondaryCanBus::GetTransport() == nullptr)
 	{
 		return nullptr;
 	}
+#endif
 	CanMessageBuffer *_ecv_null buf = CanMessageBuffer::Allocate();
 	if (buf == nullptr)
 	{

@@ -4,8 +4,8 @@
  * CanTransport implementation backed by a CoreN2G CanDevice (the MCU's own CAN controller).
  */
 
-#ifndef SRC_CAN_CANDEVICETRANSPORT_H_
-#define SRC_CAN_CANDEVICETRANSPORT_H_
+#ifndef SRC_CAN_BUS_CANDEVICETRANSPORT_H_
+#define SRC_CAN_BUS_CANDEVICETRANSPORT_H_
 
 #include "CanTransport.h"
 
@@ -64,4 +64,4 @@ private:
 
 #endif	// SUPPORT_CAN_EXPANSION
 
-#endif /* SRC_CAN_CANDEVICETRANSPORT_H_ */
+#endif /* SRC_CAN_BUS_CANDEVICETRANSPORT_H_ */
