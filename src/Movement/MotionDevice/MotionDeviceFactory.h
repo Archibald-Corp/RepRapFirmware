@@ -3,11 +3,14 @@
 #define SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEFACTORY_H_
 
 #include "MotionDeviceInterface.h"
+#include <General/function_ref.h>
 
 namespace MotionDeviceFactory {
     void Init() noexcept;
     MotionDeviceInterface& ResolveDriver(DriverId) noexcept;
     MotionDeviceInterface& GetDevice(MotionDeviceType) noexcept;
+    void ForEachDevice(function_ref_noexcept<void(MotionDeviceInterface&) noexcept> func) noexcept;		// call func on every backend built into this firmware
+    GCodeResult ConfigureBinding(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);			// M569.10: bind a driver number to a backend by name
 }
 
 #endif /* SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEFACTORY_H_ */ 

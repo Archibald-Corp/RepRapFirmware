@@ -995,6 +995,11 @@ GCodeResult GCodes::ConfigureStepMode(GCodeBuffer& gb, const StringRef& reply) T
 // Deal with M569
 GCodeResult GCodes::ConfigureDriver(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
+	if (gb.GetCommandFraction() == 10)								// M569.10: hand a driver number to a motion backend
+	{
+		return MotionDeviceFactory::ConfigureBinding(gb, reply);
+	}
+
 	gb.MustSee('P');
 	size_t drivesCount = numVisibleAxes;
 	DriverId driverIds[drivesCount];

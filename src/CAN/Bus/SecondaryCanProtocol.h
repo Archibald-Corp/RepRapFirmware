@@ -4,7 +4,7 @@
  * Selects the protocol that runs on the secondary CAN bus. This is a build-time choice because the CAN controller's
  * memory layout (and whether it runs CAN-FD) depends on the largest frame the protocol uses.
  *
- * Set SECONDARY_CAN_PROTOCOL to one of the values below to choose the protocol; the default is ODrive.
+ * Set SECONDARY_CAN_PROTOCOL to one of the values below to choose the protocol; the default is moteus.
  */
 
 #ifndef SRC_CAN_BUS_SECONDARYCANPROTOCOL_H_
@@ -19,7 +19,7 @@
 #define SECONDARY_CAN_PROTOCOL_MOTEUS	2
 
 #ifndef SECONDARY_CAN_PROTOCOL
-# define SECONDARY_CAN_PROTOCOL			SECONDARY_CAN_PROTOCOL_ODRIVE
+# define SECONDARY_CAN_PROTOCOL			SECONDARY_CAN_PROTOCOL_MOTEUS
 #endif
 
 #if SECONDARY_CAN_PROTOCOL == SECONDARY_CAN_PROTOCOL_MOTEUS

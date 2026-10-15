@@ -14,7 +14,7 @@ enum class MotionDeviceType : uint8_t {
 	none = 0,
 	local = 1,
 	can = 2,
-	moteus = 3 //will be implemented in a later sprint, used to test rejection
+	moteus = 3 // mjbots moteus servos on the secondary CAN bus (MoteusMotionDevice)
 };
 
 class MotionDeviceInterface {
@@ -40,6 +40,12 @@ public:
 	virtual GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) = 0;						// handle M569 for this driver
 	virtual bool StopDriver (DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept = 0;											// stop a motor mid-move (homing) we only deal with remote drives through the interface
 	virtual bool RevertStoppedDrivers() noexcept { return true; }																				//default is nothing to revert
+	virtual GCodeResult AttachDriver(DriverId, const StringRef& reply) noexcept													// M569.10: take over a driver number (default: refuse)
+	{
+		reply.printf("the %s backend can't take over drivers", GetName());
+		return GCodeResult::error;
+	}
+	virtual void DetachDriver(DriverId) noexcept { }																			// a driver this backend had was bound elsewhere (default: nothing)
 };
 
 #endif /*SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEINTERFACE_H_*/
