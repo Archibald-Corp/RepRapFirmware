@@ -9,10 +9,10 @@
 #include <Tools/Tool.h>
 #include <Heating/Heat.h>
 #include <Endstops/ZProbe.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #if SUPPORT_CAN_EXPANSION
 # include <CAN/CanMotion.h>
-#include <Movement/MotionDevice/MotionDeviceFactory.h>
 #endif
 
 #if HAS_SBC_INTERFACE
@@ -30,11 +30,22 @@
 // Wait for movement to stop after performing a move that may terminate early
 bool GCodes::WaitForEndstopOrProbingMoveToFinish(GCodeBuffer& gb) noexcept
 {
-	return LockCurrentMovementSystemAndWaitForStandstill(gb)
-#if SUPPORT_CAN_EXPANSION
-			&& MotionDeviceFactory::GetDevice(MotionDeviceType::can).RevertStoppedDrivers()
-#endif
-		;
+	if (!LockCurrentMovementSystemAndWaitForStandstill(gb))
+	{
+		return false;
+	}
+
+	// Each backend reverts its stopped drivers over several calls, so poll all of them every time and finish only when every one has
+	bool allReverted = true;
+	MotionDeviceFactory::ForEachDevice([&allReverted](MotionDeviceInterface& dev) noexcept
+										{
+											if (!dev.RevertStoppedDrivers())
+											{
+												allReverted = false;
+											}
+										}
+									  );
+	return allReverted;
 }
 
 // Execute a step of the state machine

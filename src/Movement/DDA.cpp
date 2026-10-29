@@ -1273,9 +1273,7 @@ void DDA::Prepare(DDARing& ring,
 
 	if (simMode < SimulationMode::normal)
 	{
-#if SUPPORT_CAN_EXPANSION
-		MotionDeviceFactory::GetDevice(MotionDeviceType::can).StartMovement();
-#endif
+		MotionDeviceFactory::ForEachDevice([](MotionDeviceInterface& dev) noexcept { dev.StartMovement(); });	// tell every backend a move is being prepared
 		// Handle all drivers
 		if (flags.isLeadscrewAdjustmentMove)
 		{
@@ -1437,15 +1435,22 @@ void DDA::Prepare(DDARing& ring,
 			(void)move.CheckEndstops(false);											// this may modify pending CAN moves
 		}
 
-#if SUPPORT_CAN_EXPANSION
-		const uint32_t canClocksNeeded = MotionDeviceFactory::GetDevice(MotionDeviceType::can).FinishMovement(*this, afterPrepare.moveStartTime, simMode != SimulationMode::off);
-		if (canClocksNeeded > clocksNeeded)
+		// Commit the move on every backend. Due to rounding error a backend (normally CAN) quite often calculates the move as being longer than our
+		// previously-calculated value, normally by just one clock. Extend our move time in this case so that the expansion boards don't need to catch up.
+		uint32_t backendClocksNeeded = 0;
+		MotionDeviceFactory::ForEachDevice([this, &backendClocksNeeded, simMode](MotionDeviceInterface& dev) noexcept
+											{
+												const uint32_t devClocksNeeded = dev.FinishMovement(*this, afterPrepare.moveStartTime, simMode != SimulationMode::off);
+												if (devClocksNeeded > backendClocksNeeded)
+												{
+													backendClocksNeeded = devClocksNeeded;
+												}
+											}
+										  );
+		if (backendClocksNeeded > clocksNeeded)
 		{
-			// Due to rounding error in the calculations, we quite often calculate the CAN move as being longer than our previously-calculated value, normally by just one clock.
-			// Extend our move time in this case so that the expansion boards don't need to catch up.
-			clocksNeeded = canClocksNeeded;
+			clocksNeeded = backendClocksNeeded;
 		}
-#endif
 
 		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves))		// show the prepared DDA if debug enabled
 		{
