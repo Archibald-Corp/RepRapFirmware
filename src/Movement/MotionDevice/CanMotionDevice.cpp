@@ -78,4 +78,8 @@ bool CanMotionDevice::RevertStoppedDrivers() noexcept {
     return CanMotion::RevertStoppedDrivers();
 }
 
+bool CanMotionDevice::GetDirection(const Move&, DriverId driver) const noexcept {
+    return reprap.GetExpansion().GetDriverDirection(driver);			// the value cached when M569 S was sent to the board
+}
+
 #endif /* SUPPORT_CAN_EXPANSION */

@@ -1306,7 +1306,8 @@ void DDA::Prepare(DDARing& ring,
 #if SUPPORT_CAN_EXPANSION
 						if (driver.IsRemote())
 						{
-							CanMotion::AddAxisMovement(params, driver, delta);
+							// The driver's backend executes it (Duet CAN boards send a move message); G32 refuses backends that can't (ZLeadscrewKinematics)
+							MotionDeviceFactory::ResolveDriver(driver).AddAxisMovement(params, driver, delta);
 						}
 						else		// we don't generate segments for leadscrew adjustment moves to remote drivers
 #endif

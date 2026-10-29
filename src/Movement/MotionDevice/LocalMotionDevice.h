@@ -13,6 +13,8 @@ public:
 	void DisableDriver (Move&, const CanDriversList& drivers) noexcept override;
 	GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) override;
 	bool StopDriver (DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept override;
+	bool GetDirection(const Move& move, DriverId driver) const noexcept override;
+	bool SupportsIndependentMotorMoves() const noexcept override { return true; }
 };
 
 #endif /* SRC_MOVEMENT_MOTIONDEVICE_LOCALMOTIONDEVICE_H_ */

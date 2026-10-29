@@ -283,7 +283,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 				GetExtruderShaperForExtruder(extruder).SetParameters(params);
 #if SUPPORT_CAN_EXPANSION
 				const DriverId did = GetExtruderDriver(extruder);
-				if (did.IsRemote())
+				if (MotionDeviceFactory::IsHandledBy(did, MotionDeviceType::can))		// only Duet expansion boards take this message
 				{
 					canDriversToUpdate.AddEntry(did, ShortPressureAdvanceParameters(params));
 				}
@@ -305,7 +305,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 										{
 											GetExtruderShaperForExtruder(extruder).SetParameters(params);
 											const DriverId did = GetExtruderDriver(extruder);
-											if (did.IsRemote())
+											if (MotionDeviceFactory::IsHandledBy(did, MotionDeviceType::can))
 											{
 												canDriversToUpdate.AddEntry(did, ShortPressureAdvanceParameters(params));
 											}
@@ -914,14 +914,10 @@ int Move::GetMotorCurrent(size_t drive, int code) const noexcept
 	return lrintf(rslt);
 }
 
-// Get the direction setting for a local or remote driver
+// Get the direction setting for a local or remote driver: whichever backend owns it knows
 bool Move::GetDirectionValue(DriverId did) const noexcept
 {
-	return
-#if SUPPORT_CAN_EXPANSION
-		(did.IsRemote()) ? reprap.GetExpansion().GetDriverDirection(did) :
-#endif
-			GetDirectionValue(did.localDriver);
+	return MotionDeviceFactory::ResolveDriver(did).GetDirection(*this, did);
 }
 
 // Set the motor idle current factor

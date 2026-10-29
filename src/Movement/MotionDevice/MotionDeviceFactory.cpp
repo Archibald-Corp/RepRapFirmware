@@ -27,6 +27,7 @@ namespace
             return GCodeResult::error;
         }
         bool StopDriver (DriverId, int32_t, bool) noexcept override { return false; }
+        bool GetDirection(const Move&, DriverId) const noexcept override { return true; }	// no real backend: report forwards
     };
 }
 
@@ -100,6 +101,10 @@ MotionDeviceInterface& GetDevice(MotionDeviceType device) noexcept {
 MotionDeviceInterface& ResolveDriver(DriverId driver) noexcept {
     const DriverBinding *_ecv_null const binding = FindBinding(driver);
     return (binding != nullptr) ? GetDevice(binding->type) : DefaultDevice(driver);
+}
+
+bool IsHandledBy(DriverId driver, MotionDeviceType type) noexcept {
+    return ResolveDriver(driver).GetType() == type;
 }
 
 void ForEachDevice(function_ref_noexcept<void(MotionDeviceInterface&) noexcept> func) noexcept {

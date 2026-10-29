@@ -21,6 +21,7 @@ public:
 	bool StopDriver(DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept override;
 	GCodeResult AttachDriver(DriverId driver, const StringRef& reply) noexcept override;
 	void DetachDriver(DriverId driver) noexcept override;
+	bool GetDirection(const Move& move, DriverId driver) const noexcept override;
 
 private:
 	// One bound servo. Settings come from M569 once M569.10 has bound the driver to this backend.

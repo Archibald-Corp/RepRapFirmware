@@ -18,6 +18,8 @@ public:
 	GCodeResult ConfigureDriver(Move&, DriverId, GCodeBuffer&, const StringRef& reply) THROWS(GCodeException) override;
 	bool StopDriver (DriverId driver, int32_t netStepsTaken, bool executingMove) noexcept override;
 	bool RevertStoppedDrivers() noexcept override;
+	bool GetDirection(const Move& move, DriverId driver) const noexcept override;
+	bool SupportsIndependentMotorMoves() const noexcept override { return true; }
 };
 
 #endif /* SUPPORT_CAN_EXPANSION */

@@ -44,5 +44,9 @@ bool LocalMotionDevice::StopDriver (DriverId, int32_t, bool) noexcept {
     return false;
 }
 
+bool LocalMotionDevice::GetDirection(const Move& move, DriverId driver) const noexcept {
+    return move.GetDirectionValue(driver.localDriver);					// the local-only version, unchanged
+}
+
 
 

@@ -577,6 +577,7 @@ private:
 	void IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> localFunc, function_ref_noexcept<void(DriverId) noexcept> remoteFunc) noexcept;
 	void IterateLocalDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, func, [](DriverId) noexcept -> void {}); }
 	void IterateRemoteDrivers(size_t axisOrExtruder, function_ref_noexcept<void(DriverId) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, [](uint8_t) noexcept -> void {}, func); }
+	void IterateAllDriverIds(size_t axisOrExtruder, function_ref_noexcept<void(DriverId) noexcept> func) noexcept;	// every driver of an axis or extruder, whichever backend owns it
 #else
 	void IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> localFunc) noexcept;
 	void IterateLocalDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, func); }

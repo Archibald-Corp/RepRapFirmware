@@ -2330,7 +2330,7 @@ bool Move::UpdateCurrentMotion(size_t driver, uint32_t when, MotionParameters& m
 bool Move::SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& reply) noexcept
 {
 	bool hasRemoteDrivers = false;
-	IterateRemoteDrivers(axisOrExtruder, [&hasRemoteDrivers](DriverId driver) noexcept -> void { hasRemoteDrivers = true; });
+	IterateAllDriverIds(axisOrExtruder, [&hasRemoteDrivers](DriverId driver) noexcept -> void { if (driver.IsRemote()) { hasRemoteDrivers = true; } });
 
 	// Phase stepping does not support remote drivers
 	if (hasRemoteDrivers && mode == StepMode::phase)
@@ -3022,10 +3022,11 @@ void Move::IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint
 			{
 				localFunc(id.localDriver);
 			}
-			else
+			else if (MotionDeviceFactory::IsHandledBy(id, MotionDeviceType::can))
 			{
 				remoteFunc(id);
 			}
+			// Drivers owned by another backend (e.g. moteus) are skipped: that backend handles them itself
 		}
 	}
 	else if (axisOrExtruder < MaxAxesPlusExtruders)
@@ -3037,15 +3038,42 @@ void Move::IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint
 			{
 				localFunc(id.localDriver);
 			}
-			else
+			else if (MotionDeviceFactory::IsHandledBy(id, MotionDeviceType::can))
 			{
 				remoteFunc(id);
 			}
+			// Drivers owned by another backend (e.g. moteus) are skipped: that backend handles them itself
 		}
 	}
 	else if (axisOrExtruder < MaxAxesPlusExtruders + NumDirectDrivers)
 	{
 		localFunc(axisOrExtruder - MaxAxesPlusExtruders);
+	}
+}
+
+// Call func for every driver of an axis or extruder, whichever backend owns it.
+// Unlike IterateDrivers, drivers owned by backends other than local and CAN (e.g. moteus) are included.
+void Move::IterateAllDriverIds(size_t axisOrExtruder, function_ref_noexcept<void(DriverId) noexcept> func) noexcept
+{
+	if (axisOrExtruder < reprap.GetGCodes().GetTotalAxes())
+	{
+		for (size_t i = 0; i < axisDrivers[axisOrExtruder].numDrivers; ++i)
+		{
+			func(axisDrivers[axisOrExtruder].driverNumbers[i]);
+		}
+	}
+	else if (axisOrExtruder < MaxAxesPlusExtruders)
+	{
+		if (LogicalDriveToExtruder(axisOrExtruder) < reprap.GetGCodes().GetNumExtruders())
+		{
+			func(extruderDrivers[LogicalDriveToExtruder(axisOrExtruder)]);
+		}
+	}
+	else if (axisOrExtruder < MaxAxesPlusExtruders + NumDirectDrivers)
+	{
+		DriverId id;
+		id.SetLocal(axisOrExtruder - MaxAxesPlusExtruders);
+		func(id);
 	}
 }
 
@@ -3211,6 +3239,21 @@ bool Move::GetDriverStepTiming(size_t driver, float microseconds[4]) const noexc
 
 #if HAS_STALL_DETECT || SUPPORT_CAN_EXPANSION
 
+# if SUPPORT_CAN_EXPANSION
+// Stall detection settings can only go to this board's drivers and Duet expansion boards.
+// Return true, with an error message in reply, if driver belongs to any other backend.
+static bool StallDetectionUnsupported(DriverId driver, const StringRef& reply) noexcept
+{
+	if (driver.IsLocal() || MotionDeviceFactory::IsHandledBy(driver, MotionDeviceType::can))
+	{
+		return false;
+	}
+	reply.printf("Stall detection isn't supported for driver %u.%u (%s backend)",
+				 driver.boardAddress, driver.localDriver, MotionDeviceFactory::ResolveDriver(driver).GetName());
+	return true;
+}
+# endif
+
 // Configure the motor stall detection, returning true if an error was encountered
 GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf) THROWS(GCodeException)
 {
@@ -3241,6 +3284,10 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 # if SUPPORT_CAN_EXPANSION
 			else
 			{
+				if (StallDetectionUnsupported(drives[i], reply))
+				{
+					return GCodeResult::error;
+				}
 				canDrivers.AddEntry(drives[i]);
 			}
 # endif
@@ -3252,6 +3299,17 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 	{
 		if (gb.Seen(reprap.GetGCodes().GetAxisLetters()[axis]))
 		{
+# if SUPPORT_CAN_EXPANSION
+			bool unsupported = false;
+			IterateAllDriverIds(axis, [&unsupported, &reply](DriverId driver) noexcept -> void
+								{
+									if (!unsupported) { unsupported = StallDetectionUnsupported(driver, reply); }
+								});
+			if (unsupported)
+			{
+				return GCodeResult::error;
+			}
+# endif
 			IterateDrivers(axis,
 							[&drivers](uint8_t localDriver) noexcept -> void { drivers.SetBit(localDriver); }
 # if SUPPORT_CAN_EXPANSION
@@ -3279,6 +3337,10 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 # if SUPPORT_CAN_EXPANSION
 				else
 				{
+					if (StallDetectionUnsupported(driver, reply))
+					{
+						return GCodeResult::error;
+					}
 					canDrivers.AddEntry(driver);
 				}
 # endif

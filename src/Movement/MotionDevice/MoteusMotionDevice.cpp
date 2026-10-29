@@ -127,6 +127,15 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 	return GCodeResult::ok;
 }
 
+bool MoteusMotionDevice::GetDirection(const Move&, DriverId driver) const noexcept {
+	for (size_t i = 0; i < numServos; ++i) {
+		if (servos[i].driver == driver) {
+			return !servos[i].reverse;
+		}
+	}
+	return true;										// not one of ours (can't happen through ResolveDriver): report forwards
+}
+
 MoteusMotionDevice::Servo *_ecv_null MoteusMotionDevice::Find(DriverId driver) noexcept {
 	for (size_t i = 0; i < numServos; ++i) {
 		if (servos[i].driver == driver) {

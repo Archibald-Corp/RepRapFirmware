@@ -10,10 +10,32 @@
 #include <Platform/RepRap.h>
 #include <Platform/Platform.h>
 #include <Movement/Move.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Math/Matrix.h>
 
 const float M3ScrewPitch = 0.5;
+
+// Leadscrew adjustment moves each Z motor on its own. Return false, with a message, if any Z motor's backend can't do that.
+static bool AllZDriversSupportIndependentMoves(const StringRef& reply) noexcept
+{
+	const AxisDriversConfig& config = reprap.GetMove().GetAxisDriversConfig(Z_AXIS);
+	for (size_t i = 0; i < config.numDrivers; ++i)
+	{
+		const DriverId driver = config.driverNumbers[i];
+		const MotionDeviceInterface& backend = MotionDeviceFactory::ResolveDriver(driver);
+		if (!backend.SupportsIndependentMotorMoves())
+		{
+#if SUPPORT_CAN_EXPANSION
+			reply.printf("Leadscrew adjustment isn't supported for driver %u.%u (%s backend)", driver.boardAddress, driver.localDriver, backend.GetName());
+#else
+			reply.printf("Leadscrew adjustment isn't supported for driver %u (%s backend)", driver.localDriver, backend.GetName());
+#endif
+			return false;
+		}
+	}
+	return true;
+}
 
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
@@ -375,6 +397,10 @@ bool ZLeadscrewKinematics::DoAutoCalibration(MovementState& ms, size_t numFactor
 			{
 				reply.printf("Some computed corrections exceed configured limit of %.02fmm:", (double)maxCorrection);
 				AppendCorrections(solution, reply);
+				failed = true;
+			}
+			else if (!AllZDriversSupportIndependentMoves(reply))
+			{
 				failed = true;
 			}
 			else

@@ -12,6 +12,7 @@
 #include <Platform/RepRap.h>
 #include <Movement/Move.h>
 #include <Movement/Kinematics/Kinematics.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #if SUPPORT_CAN_EXPANSION
 # include <CAN/CanInterface.h>
@@ -101,6 +102,12 @@ void StallDetectionEndstop::AddDriverToMonitoredList(DriverId did, float speed) 
 #if SUPPORT_CAN_EXPANSION
 	if (did.IsRemote())
 	{
+		if (!MotionDeviceFactory::IsHandledBy(did, MotionDeviceType::can))
+		{
+			String<StringLength50> driverText;
+			driverText.printf("%u.%u (%s backend)", did.boardAddress, did.localDriver, MotionDeviceFactory::ResolveDriver(did).GetName());
+			throw GCodeException(-1, -1, "stall detection isn't supported for driver %s", driverText.c_str());
+		}
 		try
 		{
 			CanInterface::EnableRemoteStallEndstop(did, fabsf(speed));						// may throw
