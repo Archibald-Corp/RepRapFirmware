@@ -221,6 +221,7 @@ public:
 		{ return extruderDrivers[extruder]; }
 	void SetExtruderDriver(size_t extruder, DriverId driver) noexcept
 		pre(extruder < MaxExtruders);
+	bool GetLogicalDriveOfDriver(DriverId driver, size_t& drive) const noexcept;	// find the axis or extruder (M584) that a driver belongs to; return false if none
 
 #ifdef DUET3_MB6XD		// the first element has a special meaning when we use a TC to generate the steps
 	uint32_t GetSlowDriverStepPeriodClocks() { return stepPulseMinimumPeriodClocks; }
@@ -281,6 +282,8 @@ public:
 	void GetCurrentUserPosition(float m[MaxAxes], MovementSystemNumber msNumber, bool doBedCompensation, const Tool *tool) const noexcept;
 																			// Return the position (after all queued moves have been executed) in transformed coords
 	int32_t GetLiveMotorPosition(size_t driver) const noexcept pre(driver < MaxAxesPlusExtruders);
+	void GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed) const noexcept pre(drive < MaxAxesPlusExtruders);
+																			// Get the planned position (microsteps) and speed (microsteps per clock) of a drive at movement time 'when'
 	void SetMotorPosition(size_t drive, int32_t pos, bool clearBacklash) noexcept pre(drive < MaxAxesPlusExtruders);
 	void SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *_ecv_array positions, bool clearBacklash) noexcept;
 
@@ -927,6 +930,11 @@ inline void Move::UpdateExtrusionPendingLimits(float extrusionPending) noexcept
 inline int32_t Move::GetLiveMotorPosition(size_t driver) const noexcept
 {
 	return dms[driver].currentMotorPosition;
+}
+
+inline void Move::GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed) const noexcept
+{
+	dms[drive].GetPlannedMotion(when, position, speed);
 }
 
 inline ExtruderShaper& Move::GetExtruderShaperForExtruder(size_t extruder) noexcept

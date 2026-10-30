@@ -3106,6 +3106,34 @@ void Move::IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint
 
 #endif
 
+// Find the logical drive (an axis, or an extruder via ExtruderToLogicalDrive) that M584 has assigned a driver to. Return false if it isn't assigned to anything.
+// Used by backends that stream each drive's planned motion to their motors.
+bool Move::GetLogicalDriveOfDriver(DriverId driver, size_t& drive) const noexcept
+{
+	const GCodes& gCodes = reprap.GetGCodes();
+	for (size_t axis = 0; axis < gCodes.GetTotalAxes(); ++axis)
+	{
+		const AxisDriversConfig& config = axisDrivers[axis];
+		for (size_t i = 0; i < config.numDrivers; ++i)
+		{
+			if (config.driverNumbers[i] == driver)
+			{
+				drive = axis;
+				return true;
+			}
+		}
+	}
+	for (size_t extruder = 0; extruder < gCodes.GetNumExtruders(); ++extruder)
+	{
+		if (extruderDrivers[extruder] == driver)
+		{
+			drive = ExtruderToLogicalDrive(extruder);
+			return true;
+		}
+	}
+	return false;
+}
+
 #ifdef DUET3_MB6XD
 
 bool Move::HasDriverError(size_t driver) const noexcept

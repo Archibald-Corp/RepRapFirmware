@@ -30,6 +30,7 @@ namespace TaskPriority
 #endif
 	constexpr unsigned int LaserPriority = 5;
 	constexpr unsigned int CanSenderPriority = 5;
+	constexpr unsigned int MoteusPriority = 5;						// streams setpoints to moteus servos on the secondary CAN bus
 	constexpr unsigned int EthernetPriority = 5;
 	constexpr unsigned int CanReceiverPriority = 6;
 	constexpr unsigned int Accelerometer = 6;

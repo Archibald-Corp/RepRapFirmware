@@ -69,6 +69,7 @@ public:
 #endif
 
 	float GetCurrentPosition(uint32_t when) const noexcept;
+	void GetPlannedMotion(uint32_t when, float& position, float& speed) const noexcept;	// planned position and speed at 'when', which may be a little in the future
 #if SUPPORT_PHASE_STEPPING
 	bool SetStepMode(StepMode mode) noexcept;
 	StepMode GetStepMode() const noexcept { return stepMode; }
@@ -297,6 +298,50 @@ inline float DriveMovement::GetCurrentPosition(uint32_t when) const noexcept
 
 	// If we get here then no movement is taking place
 	return (float)((motioncalc_t)currentMotorPosition + distanceCarriedForwards);
+}
+
+/**
+ * @brief Get the planned position and speed at a time that may be a little in the future. Units are microsteps and step clocks.
+ * Unlike GetCurrentPosition this looks past the first segment, so 'when' may be after the end of the executing segment.
+ * Segments that have not started can still be modified, but never within MoveTiming::AbsoluteMinimumPreparedTime of now, so 'when' must be well within that.
+ * @param when step clock time at which to evaluate the motion
+ * @param position [out] position of the dm in microsteps
+ * @param speed [out] speed of the dm in microsteps per step clock
+ */
+inline void DriveMovement::GetPlannedMotion(uint32_t when, float& position, float& speed) const noexcept
+{
+	AtomicCriticalSectionLocker lock;										// we don't want 'segments' changing while we do this
+
+	const MoveSegment *_ecv_null seg = segments;
+	motioncalc_t segStartPosition = (motioncalc_t)((seg != nullptr && seg->GetFlags().executing) ? positionAtSegmentStart : currentMotorPosition)
+										+ distanceCarriedForwards;
+	while (seg != nullptr)
+	{
+		const int32_t timeSinceStart = (int32_t)(when - seg->GetStartTime());
+		if (timeSinceStart < 0)
+		{
+			break;															// this segment hasn't started by then, so the drive is stationary
+		}
+		if ((uint32_t)timeSinceStart < seg->GetDuration())
+		{
+			const motioncalc_t t = (motioncalc_t)timeSinceStart;
+			const motioncalc_t startSpeed = seg->CalcU();
+#if SUPPORT_S_CURVE
+			position = (float)(segStartPosition + (startSpeed + (OneHalf * seg->GetA() + OneSixth * seg->GetJ() * t) * t) * t);
+			speed = (float)(startSpeed + (seg->GetA() + OneHalf * seg->GetJ() * t) * t);
+#else
+			position = (float)(segStartPosition + (startSpeed + OneHalf * seg->GetA() * t) * t);
+			speed = (float)(startSpeed + seg->GetA() * t);
+#endif
+			return;
+		}
+		segStartPosition += seg->GetLength();								// this segment will have finished by then, so move on to the next one
+		seg = seg->GetNext();
+	}
+
+	// If we get here then no segment is running at time 'when'
+	position = (float)segStartPosition;
+	speed = 0.0;
 }
 
 #if SUPPORT_PHASE_STEPPING
