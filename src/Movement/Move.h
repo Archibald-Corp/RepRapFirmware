@@ -38,6 +38,11 @@
 class CanMessageBuffer;
 #endif
 
+#if SUPPORT_CAN_EXPANSION
+class MotionDeviceInterface;
+class CanDriversList;
+#endif
+
 constexpr bool DirectionForwards = true;
 constexpr bool DirectionBackwards = !DirectionForwards;
 
@@ -282,8 +287,9 @@ public:
 	void GetCurrentUserPosition(float m[MaxAxes], MovementSystemNumber msNumber, bool doBedCompensation, const Tool *tool) const noexcept;
 																			// Return the position (after all queued moves have been executed) in transformed coords
 	int32_t GetLiveMotorPosition(size_t driver) const noexcept pre(driver < MaxAxesPlusExtruders);
-	void GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed) const noexcept pre(drive < MaxAxesPlusExtruders);
-																			// Get the planned position (microsteps) and speed (microsteps per clock) of a drive at movement time 'when'
+	void GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed, uint32_t& positionSets) const noexcept pre(drive < MaxAxesPlusExtruders);
+																			// Get the planned position (microsteps) and speed (microsteps per clock) of a drive at movement time 'when',
+																			// and how many times its position has been set (G92, homing) so that a change of position isn't mistaken for motion
 	void SetMotorPosition(size_t drive, int32_t pos, bool clearBacklash) noexcept pre(drive < MaxAxesPlusExtruders);
 	void SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *_ecv_array positions, bool clearBacklash) noexcept;
 
@@ -581,6 +587,7 @@ private:
 	void IterateLocalDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, func, [](DriverId) noexcept -> void {}); }
 	void IterateRemoteDrivers(size_t axisOrExtruder, function_ref_noexcept<void(DriverId) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, [](uint8_t) noexcept -> void {}, func); }
 	void IterateAllDriverIds(size_t axisOrExtruder, function_ref_noexcept<void(DriverId) noexcept> func) noexcept;	// every driver of an axis or extruder, whichever backend owns it
+	void ForEachBackendDrivers(size_t axisOrExtruder, function_ref_noexcept<void(MotionDeviceInterface&, const CanDriversList&) noexcept> func) noexcept;	// call func for each backend with the drivers of this axis or extruder that it owns
 #else
 	void IterateDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> localFunc) noexcept;
 	void IterateLocalDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, func); }
@@ -932,9 +939,9 @@ inline int32_t Move::GetLiveMotorPosition(size_t driver) const noexcept
 	return dms[driver].currentMotorPosition;
 }
 
-inline void Move::GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed) const noexcept
+inline void Move::GetPlannedMotion(size_t drive, uint32_t when, float& position, float& speed, uint32_t& positionSets) const noexcept
 {
-	dms[drive].GetPlannedMotion(when, position, speed);
+	dms[drive].GetPlannedMotion(when, position, speed, positionSets);
 }
 
 inline ExtruderShaper& Move::GetExtruderShaperForExtruder(size_t extruder) noexcept

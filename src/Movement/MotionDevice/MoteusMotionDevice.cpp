@@ -42,17 +42,28 @@ void MoteusMotionDevice::Spin() noexcept {
 		size_t drive;
 		if (s.stepsPerRev <= 0.0 || !move.GetLogicalDriveOfDriver(s.driver, drive)) {
 			s.hasTarget = false;							// not configured yet: nothing to follow
+			s.needsAlign = true;							// when it comes back, the old offset won't apply
 			continue;
 		}
 		float steps, stepsPerClock;
-		move.GetPlannedMotion(drive, when, steps, stepsPerClock);
+		uint32_t positionSets;
+		move.GetPlannedMotion(drive, when, steps, stepsPerClock, positionSets);
+		if (s.hasTarget && drive != s.drive) {
+			s.needsAlign = true;							// M584 moved it to another drive, so the old offset doesn't apply
+		}
+		s.drive = drive;
 		const float sign = (s.reverse) ? -1.0 : 1.0;
-		s.targetRev = sign * steps/s.stepsPerRev;							// rev = steps / U
+		const float newTargetRev = sign * steps/s.stepsPerRev;				// rev = steps / U
+		if (s.hasTarget && positionSets != s.positionSets) {
+			s.offsetRev -= newTargetRev - s.targetRev;		// only RRF's idea of the position changed (G92, homing), so keep the command the same
+		}
+		s.positionSets = positionSets;
+		s.targetRev = newTargetRev;
 		s.targetRevPerSec = sign * stepsPerClock * (float)StepClockRate/s.stepsPerRev;	// rev/s = steps per clock × clocks per second / U
 		s.hasTarget = true;
 	}
 
-	// Send every servo with an ID its frame, then collect the replies. For now the frame is a query only; step 7 sends position commands.
+	// Send every servo with an ID its frame, then collect the replies. For now the frame is a query or a stop; stage 7.3 adds position commands.
 	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
 	if (bus == nullptr) {
 		return;												// the secondary bus isn't running
@@ -67,7 +78,7 @@ void MoteusMotionDevice::Spin() noexcept {
 			s.replied = false;								// it didn't answer the last frame in time
 		}
 		s.awaitingReply = false;
-		if (s.servoId != 0 && bus->IsSpaceAvailable(CanTxSlot::fifo, 0) && Moteus::MakeQuery(buf, s.servoId)) {
+		if (s.servoId != 0 && bus->IsSpaceAvailable(CanTxSlot::fifo, 0) && MakeFrame(buf, s)) {
 			(void)bus->Send(CanTxSlot::fifo, 0, &buf);
 			s.awaitingReply = true;
 			++expected;
@@ -91,11 +102,27 @@ void MoteusMotionDevice::Spin() noexcept {
 				s.awaitingReply = false;
 				s.replied = true;
 				--expected;
+				if (s.needsAlign && s.hasTarget && !std::isnan(s.state.position)) {
+					s.offsetRev = s.state.position - s.targetRev;	// from here on, targetRev + offsetRev starts from where the servo is now
+					s.needsAlign = false;
+				}
 				break;
 			}
 		}
 		lock.Release();
 	}
+}
+
+// Build this cycle's frame for a servo. Each frame also asks for the servo's state.
+bool MoteusMotionDevice::MakeFrame(CanMessageBuffer& buf, Servo& s) noexcept {
+	if (s.stopPending) {
+		if (!Moteus::MakeStop(buf, s.servoId, true)) {
+			return false;
+		}
+		s.stopPending = false;
+		return true;
+	}
+	return Moteus::MakeQuery(buf, s.servoId);
 }
 
 MotionDeviceType MoteusMotionDevice::GetType() const noexcept {
@@ -114,12 +141,35 @@ void MoteusMotionDevice::AddExtruderMovement(const PrepParams&, DriverId, motion
 	// No-op, as AddAxisMovement.
 }
 
-void MoteusMotionDevice::EnableDriver(Move&, const CanDriversList&, float) noexcept {
-	// TODO step 7: mark the servos enabled; the streaming task then holds them in position
+// Called by M17 and whenever a move needs these drivers, so it often arrives for servos that are already enabled. requiredCurrent doesn't apply: T sets the torque.
+void MoteusMotionDevice::EnableDriver(Move&, const CanDriversList& drivers, float) noexcept {
+	if (!moteusTask.IsRunning()) {
+		return;											// no servo has ever been bound, so the mutex doesn't exist yet
+	}
+	MutexLocker lock(servoTableMutex);
+	for (size_t i = 0; i < drivers.GetNumEntries(); ++i) {
+		Servo *_ecv_null const s = Find(drivers.GetEntry(i));
+		if (s != nullptr && !s->enabled) {
+			s->enabled = true;
+			s->stopPending = false;
+			s->needsAlign = true;						// it may have been turned by hand while it was off
+		}
+	}
 }
 
-void MoteusMotionDevice::DisableDriver(Move&, const CanDriversList&) noexcept {
-	// TODO step 7: queue a stop command for each servo
+// Called by M18, M84 and the idle timeout when the idle current is 0. Spin sends the stop, so this doesn't wait for the bus.
+void MoteusMotionDevice::DisableDriver(Move&, const CanDriversList& drivers) noexcept {
+	if (!moteusTask.IsRunning()) {
+		return;											// no servo has ever been bound, so the mutex doesn't exist yet
+	}
+	MutexLocker lock(servoTableMutex);
+	for (size_t i = 0; i < drivers.GetNumEntries(); ++i) {
+		Servo *_ecv_null const s = Find(drivers.GetEntry(i));
+		if (s != nullptr && s->enabled) {
+			s->enabled = false;
+			s->stopPending = true;
+		}
+	}
 }
 
 bool MoteusMotionDevice::StopDriver(DriverId, int32_t, bool) noexcept {
@@ -188,6 +238,7 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 	bool forwards;
 	if (gb.TryGetBValue('S', forwards, seen)) {
 		s->reverse = !forwards;
+		s->needsAlign = true;
 	}
 
 	uint32_t id;
@@ -200,11 +251,13 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 			}
 		}
 		s->servoId = (uint8_t)id;
+		s->needsAlign = true;
 	}
 
 	float f;
 	if (gb.TryGetLimitedFValue('U', f, seen, MinStepsPerRev, MaxStepsPerRev)) {
 		s->stepsPerRev = f;
+		s->needsAlign = true;
 	}
 	if (gb.TryGetLimitedFValue('T', f, seen, 0.0, MaxTorqueLimit)) {
 		s->maxTorque = f;
@@ -223,9 +276,12 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 		} else {
 			reply.catf("%.1f steps/rev", (double)s->stepsPerRev);
 		}
-		reply.catf(", max torque %.2f N.m", (double)s->maxTorque);
+		reply.catf(", max torque %.2f N.m, %s", (double)s->maxTorque, (s->enabled) ? "enabled" : "disabled");
 		if (s->hasTarget) {
 			reply.catf(", planned %.3f rev at %.3f rev/s", (double)s->targetRev, (double)s->targetRevPerSec);
+			if (!s->needsAlign) {
+				reply.catf(", offset %.3f rev, command %.3f rev", (double)s->offsetRev, (double)(s->targetRev + s->offsetRev));
+			}
 		}
 		if (s->replied) {
 			reply.catf(", servo at %.3f rev, mode %u, fault %u", (double)s->state.position, s->state.mode, s->state.fault);

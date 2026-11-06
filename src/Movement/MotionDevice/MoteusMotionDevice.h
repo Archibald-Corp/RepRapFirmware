@@ -36,17 +36,24 @@ private:
 		DriverId driver;					// the RRF driver number, e.g. 100.1
 		uint8_t servoId = 0;				// M569 I: moteus CAN ID, 1-127 (0 = not set yet)
 		bool reverse = false;				// M569 S0 = reverse, S1 = forwards
-		float stepsPerRev = 0.0;			// M569 U: RRF steps per servo revolution (0 = not set yet)
+		float stepsPerRev = 0.0;			// M569 U: RRF steps per servo revolution = M92 steps/mm × mm of travel per servo revolution (0 = not set yet)
 		float maxTorque = 0.0;				// M569 T: maximum torque in N.m, sent with every position command
-		float targetRev = 0.0;				// latest planned position in revolutions (no offset yet, step 6)
+		float targetRev = 0.0;				// latest planned position in revolutions (before the offset)
 		float targetRevPerSec = 0.0;		// latest planned speed in revolutions per second
 		bool hasTarget = false;				// false until U is set and M584 has mapped the driver
+		float offsetRev = 0.0;				// added to targetRev to get the position to send to the servo
+		bool needsAlign = true;				// take a new offset from the next reply
+		uint32_t positionSets = 0;			// the drive's position-set count at the last sample, to spot G92 and homing
+		size_t drive = 0;					// the logical drive this servo followed at the last sample
 		Moteus::ServoState state;			// latest reply: mode, fault, position (rev), velocity, torque, voltage, temperature
 		bool awaitingReply = false;			// a frame went out this cycle and its reply hasn't arrived yet
 		bool replied = false;				// true if the servo answered its latest finished frame
+		bool enabled = false;				// RRF wants this servo holding position (M17 or a move); no effect until position commands are sent
+		bool stopPending = false;			// send a stop command in the next cycle
 	};
 
 	Servo *_ecv_null Find(DriverId driver) noexcept;
+	bool MakeFrame(CanMessageBuffer& buf, Servo& s) noexcept;
 
 	Servo servos[MaxServos];
 	size_t numServos = 0;

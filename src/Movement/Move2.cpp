@@ -542,42 +542,38 @@ void Move::EnableDrivers(size_t axisOrExtruder, bool unconditional) noexcept
 		driverState[axisOrExtruder] = DriverStatus::enabled;
 		const float requiredCurrent = motorCurrents[axisOrExtruder] * motorCurrentFraction[axisOrExtruder];
 
-		// Collect this drive's drivers into per-backend sets, then route each set through its backend.
-		CanDriversList localDrivers;
 #if SUPPORT_CAN_EXPANSION
-		CanDriversList remoteDrivers;
-		IterateDrivers(axisOrExtruder,
-						[&localDrivers](uint8_t driver) { DriverId id; id.SetLocal(driver); localDrivers.AddEntry(id); },
-						[&remoteDrivers](DriverId driver) { remoteDrivers.AddEntry(driver); }
-					  );
-		MotionDeviceFactory::GetDevice(MotionDeviceType::can).EnableDriver(*this, remoteDrivers, requiredCurrent);
+		ForEachBackendDrivers(axisOrExtruder, [this, requiredCurrent](MotionDeviceInterface& dev, const CanDriversList& drivers) noexcept
+												{
+													dev.EnableDriver(*this, drivers, requiredCurrent);
+												}
+							 );
 #else
+		CanDriversList localDrivers;
 		IterateDrivers(axisOrExtruder,
 						[&localDrivers](uint8_t driver) { DriverId id; id.SetLocal(driver); localDrivers.AddEntry(id); }
 					  );
-#endif
 		MotionDeviceFactory::GetDevice(MotionDeviceType::local).EnableDriver(*this, localDrivers, requiredCurrent);
+#endif
 	}
 }
 
 // Disable the drivers for a drive
 void Move::DisableDrivers(size_t axisOrExtruder) noexcept
 {
-	// Collect this drive's drivers into per-backend sets, then route each set through its backend.
-	CanDriversList localDrivers;
 #if SUPPORT_CAN_EXPANSION
-	CanDriversList remoteDrivers;
-	IterateDrivers(axisOrExtruder,
-					[&localDrivers](uint8_t driver) { DriverId id; id.SetLocal(driver); localDrivers.AddEntry(id); },
-					[&remoteDrivers](DriverId driver) { remoteDrivers.AddEntry(driver); }
-				  );
-	MotionDeviceFactory::GetDevice(MotionDeviceType::can).DisableDriver(*this, remoteDrivers);
+	ForEachBackendDrivers(axisOrExtruder, [this](MotionDeviceInterface& dev, const CanDriversList& drivers) noexcept
+											{
+												dev.DisableDriver(*this, drivers);
+											}
+						 );
 #else
+	CanDriversList localDrivers;
 	IterateDrivers(axisOrExtruder,
 					[&localDrivers](uint8_t driver) { DriverId id; id.SetLocal(driver); localDrivers.AddEntry(id); }
 				  );
-#endif
 	MotionDeviceFactory::GetDevice(MotionDeviceType::local).DisableDriver(*this, localDrivers);
+#endif
 	driverState[axisOrExtruder] = DriverStatus::disabled;
 }
 

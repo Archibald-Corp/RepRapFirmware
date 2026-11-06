@@ -35,6 +35,7 @@ void DriveMovement::Init(size_t drv) noexcept
 	state = DMState::idle;
 	distanceCarriedForwards = 0.0;
 	currentMotorPosition = positionAtSegmentStart = 0;
+	positionSetCount = 0;
 	movementAccumulator = 0;
 	extruderPrinting = isExtruder = false;
 #if STEPS_DEBUG
@@ -119,7 +120,11 @@ void DriveMovement::SetMotorPosition(int32_t pos) noexcept
 	{
 		debugPrintf("Changing drive %u pos from %" PRIi32 " to %" PRIi32 "\n", drive, currentMotorPosition, pos);
 	}
-	currentMotorPosition = positionAtSegmentStart = pos;
+	{
+		AtomicCriticalSectionLocker lock;				// GetPlannedMotion must see the new position and the new count together
+		currentMotorPosition = positionAtSegmentStart = pos;
+		++positionSetCount;
+	}
 #if STEPS_DEBUG
 	positionRequested = (float)pos;
 #endif

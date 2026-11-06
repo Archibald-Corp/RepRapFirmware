@@ -69,7 +69,7 @@ public:
 #endif
 
 	float GetCurrentPosition(uint32_t when) const noexcept;
-	void GetPlannedMotion(uint32_t when, float& position, float& speed) const noexcept;	// planned position and speed at 'when', which may be a little in the future
+	void GetPlannedMotion(uint32_t when, float& position, float& speed, uint32_t& positionSets) const noexcept;	// planned position and speed at 'when', which may be a little in the future
 #if SUPPORT_PHASE_STEPPING
 	bool SetStepMode(StepMode mode) noexcept;
 	StepMode GetStepMode() const noexcept { return stepMode; }
@@ -143,6 +143,7 @@ private:
 	int32_t currentMotorPosition;						// the current motor position in microsteps
 	int32_t positionAtSegmentStart;						// the value of currentMotorPosition at the start of the current segment
 	int32_t positionAtMoveStart;						// the position at the start of the current move, if it is an isolated move
+	uint32_t positionSetCount;							// how many times the position has been set, so a streaming backend can tell a position change from motion
 #if STEPS_DEBUG
 	motioncalc_t positionRequested;						// accumulated position changes requested by moves executed - caution, the step ISR modifies this!
 #endif
@@ -307,11 +308,13 @@ inline float DriveMovement::GetCurrentPosition(uint32_t when) const noexcept
  * @param when step clock time at which to evaluate the motion
  * @param position [out] position of the dm in microsteps
  * @param speed [out] speed of the dm in microsteps per step clock
+ * @param positionSets [out] how many times the position has been set, read together with the position
  */
-inline void DriveMovement::GetPlannedMotion(uint32_t when, float& position, float& speed) const noexcept
+inline void DriveMovement::GetPlannedMotion(uint32_t when, float& position, float& speed, uint32_t& positionSets) const noexcept
 {
 	AtomicCriticalSectionLocker lock;										// we don't want 'segments' changing while we do this
 
+	positionSets = positionSetCount;
 	const MoveSegment *_ecv_null seg = segments;
 	motioncalc_t segStartPosition = (motioncalc_t)((seg != nullptr && seg->GetFlags().executing) ? positionAtSegmentStart : currentMotorPosition)
 										+ distanceCarriedForwards;

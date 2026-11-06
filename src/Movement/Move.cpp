@@ -3077,6 +3077,25 @@ void Move::IterateAllDriverIds(size_t axisOrExtruder, function_ref_noexcept<void
 	}
 }
 
+// Call func once for each backend, with the drivers of this axis or extruder that it owns. Only one list is on the stack at a time.
+void Move::ForEachBackendDrivers(size_t axisOrExtruder, function_ref_noexcept<void(MotionDeviceInterface&, const CanDriversList&) noexcept> func) noexcept
+{
+	MotionDeviceFactory::ForEachDevice([this, axisOrExtruder, &func](MotionDeviceInterface& dev) noexcept
+										{
+											CanDriversList drivers;
+											IterateAllDriverIds(axisOrExtruder, [&dev, &drivers](DriverId id) noexcept
+																				{
+																					if (&MotionDeviceFactory::ResolveDriver(id) == &dev)
+																					{
+																						drivers.AddEntry(id);
+																					}
+																				}
+															   );
+											func(dev, drivers);
+										}
+									  );
+}
+
 #else
 
 // Function to identify and iterate through all drivers attached to an axis or extruder
