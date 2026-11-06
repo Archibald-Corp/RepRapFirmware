@@ -20,7 +20,7 @@ constexpr float MaxTorqueLimit = 100.0;				// N.m; generous ceiling, the real li
 // The streaming task. It is created when the first servo is bound, so firmware with no moteus servos configured doesn't run it.
 constexpr size_t MoteusTaskStackWords = 400;			// same as CanSender; check the high-water mark in M122 once it sends messages
 static Task<MoteusTaskStackWords> moteusTask;
-static Mutex servoTableMutex;							// held by Spin for a whole cycle, and by anything that changes the servo table
+static Mutex servoTableMutex;							// held by Spin while it uses the servo table, and by anything that changes the table
 
 extern "C" [[noreturn]] void MoteusTaskLoop(void *param) noexcept
 {
@@ -29,7 +29,7 @@ extern "C" [[noreturn]] void MoteusTaskLoop(void *param) noexcept
 	for (;;)
 	{
 		device.Spin();
-		vTaskDelayUntil(&lastWakeTime, MoteusMotionDevice::UpdateIntervalMillis);
+		vTaskDelayUntil(&lastWakeTime, device.GetUpdateIntervalMillis());
 	}
 }
 
@@ -63,23 +63,38 @@ void MoteusMotionDevice::Spin() noexcept {
 	size_t expected = 0;
 	for (size_t i = 0; i < numServos; ++i) {
 		Servo& s = servos[i];
-		s.replied = false;
+		if (s.awaitingReply) {
+			s.replied = false;								// it didn't answer the last frame in time
+		}
+		s.awaitingReply = false;
 		if (s.servoId != 0 && bus->IsSpaceAvailable(CanTxSlot::fifo, 0) && Moteus::MakeQuery(buf, s.servoId)) {
 			(void)bus->Send(CanTxSlot::fifo, 0, &buf);
+			s.awaitingReply = true;
 			++expected;
+		} else {
+			s.replied = false;								// nothing went out, so no answer is coming
 		}
 	}
+	updateIntervalMillis = max<uint32_t>(MinUpdateIntervalMillis, expected);	// each servo uses about 0.75 ms of bus time per cycle, so allow 1 ms
+	lock.Release();											// don't hold the table while we sleep, or the main task could wait forever for it
 
+	const uint32_t window = updateIntervalMillis * (StepClockRate/1000) - ReplyMarginClocks;
 	const uint32_t collectStart = StepTimer::GetTimerTicks();
-	while (expected != 0 && StepTimer::GetTimerTicks() - collectStart < ReplyWindowClocks && bus->Receive(CanRxQueue::fifo0, 1, &buf)) {
+	while (expected != 0 && StepTimer::GetTimerTicks() - collectStart < window) {
+		if (!bus->Receive(CanRxQueue::fifo0, 1, &buf)) {
+			continue;										// a 1-tick wait can end early, so keep going until the window closes
+		}
+		lock.ReAcquire();
 		for (size_t i = 0; i < numServos; ++i) {
 			Servo& s = servos[i];
-			if (!s.replied && s.servoId != 0 && Moteus::ParseReply(buf, s.servoId, s.state)) {
+			if (s.awaitingReply && Moteus::ParseReply(buf, s.servoId, s.state)) {
+				s.awaitingReply = false;
 				s.replied = true;
 				--expected;
 				break;
 			}
 		}
+		lock.Release();
 	}
 }
 
@@ -134,6 +149,10 @@ GCodeResult MoteusMotionDevice::AttachDriver(DriverId driver, const StringRef& r
 	servos[numServos] = Servo();						// fresh entry
 	servos[numServos].driver = driver;
 	++numServos;
+	if (SecondaryCanBus::GetTransport() == nullptr) {
+		reply.copy("the second CAN bus isn't running, so this servo can't be reached");
+		return GCodeResult::warning;
+	}
 	return GCodeResult::ok;
 }
 

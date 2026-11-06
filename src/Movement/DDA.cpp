@@ -18,7 +18,6 @@
 #include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #if SUPPORT_CAN_EXPANSION
-# include <CAN/CanMotion.h>
 # include <CAN/CanInterface.h>
 #endif
 

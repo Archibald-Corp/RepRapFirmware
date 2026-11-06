@@ -24,7 +24,7 @@ class MoteusProtocol final : public CanBusProtocol
 {
 public:
 	static constexpr uint32_t BitRate = 1'000'000;
-	static constexpr float SamplePoint = 0.666;											// recommended by the moteus documentation
+	static constexpr float SamplePoint = 0.667;											// moteus recommends about 66.6%; at 48 quanta per bit 0.666 would truncate to 31/48 = 64.6%, this gives 32/48 = 66.7%
 	static constexpr size_t MaxDataLength = 64;											// CAN-FD
 
 	const char *_ecv_array GetName() const noexcept override { return "moteus"; }

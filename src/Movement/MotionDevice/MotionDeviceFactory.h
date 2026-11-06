@@ -6,7 +6,6 @@
 #include <General/function_ref.h>
 
 namespace MotionDeviceFactory {
-    void Init() noexcept;
     MotionDeviceInterface& ResolveDriver(DriverId) noexcept;
     MotionDeviceInterface& GetDevice(MotionDeviceType) noexcept;
     bool IsHandledBy(DriverId driver, MotionDeviceType type) noexcept;										// true if driver's backend (ResolveDriver) is of this type

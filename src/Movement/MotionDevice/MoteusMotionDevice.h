@@ -11,11 +11,12 @@
 class MoteusMotionDevice final : public MotionDeviceInterface {
 public:
 	static constexpr size_t MaxServos = 8;
-	static constexpr uint32_t UpdateIntervalMillis = 2;		// how often every servo gets a new setpoint (FreeRTOS ticks are 1 ms)
+	static constexpr uint32_t MinUpdateIntervalMillis = 2;	// the shortest time between setpoints for a servo (FreeRTOS ticks are 1 ms)
 	static constexpr uint32_t LeadClocks = StepClockRate * 2/1000;	// sample the plan this far ahead (2 ms), to cover the time to reach the servo
-	static constexpr uint32_t ReplyWindowClocks = StepClockRate/1000;	// how long to keep collecting replies each cycle (1 ms)
+	static constexpr uint32_t ReplyMarginClocks = StepClockRate/5000;	// stop collecting replies this long before the next cycle is due (0.2 ms)
 
-	void Spin() noexcept;									// one streaming cycle, called every UpdateIntervalMillis by the moteus task
+	void Spin() noexcept;									// one streaming cycle, called every GetUpdateIntervalMillis() by the moteus task
+	uint32_t GetUpdateIntervalMillis() const noexcept { return updateIntervalMillis; }
 
 	MotionDeviceType GetType() const noexcept override;
 	const char *_ecv_array GetName() const noexcept override;
@@ -41,13 +42,15 @@ private:
 		float targetRevPerSec = 0.0;		// latest planned speed in revolutions per second
 		bool hasTarget = false;				// false until U is set and M584 has mapped the driver
 		Moteus::ServoState state;			// latest reply: mode, fault, position (rev), velocity, torque, voltage, temperature
-		bool replied = false;				// true if the servo answered in the latest cycle
+		bool awaitingReply = false;			// a frame went out this cycle and its reply hasn't arrived yet
+		bool replied = false;				// true if the servo answered its latest finished frame
 	};
 
 	Servo *_ecv_null Find(DriverId driver) noexcept;
 
 	Servo servos[MaxServos];
 	size_t numServos = 0;
+	uint32_t updateIntervalMillis = MinUpdateIntervalMillis;	// set by Spin from the number of servos it talks to
 };
 
 #endif	// SUPPORT_MOTEUS

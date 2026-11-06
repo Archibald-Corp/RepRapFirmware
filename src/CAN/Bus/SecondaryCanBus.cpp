@@ -17,7 +17,7 @@ constexpr CanDevice::Config Can1Config =
 {
 	.dataSize = SecondaryCanProtocol::MaxDataLength,
 	.numTxBuffers = 2,
-	.txFifoSize = 4,
+	.txFifoSize = 8,									// one per servo: Spin sends a frame to every servo at once without waiting
 	.numRxBuffers =  0,
 	.rxFifo0Size = 16,
 	.rxFifo1Size = 16,

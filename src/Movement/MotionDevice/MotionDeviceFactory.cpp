@@ -74,10 +74,6 @@ static MotionDeviceInterface& DefaultDevice(DriverId driver) noexcept {
 namespace MotionDeviceFactory
 {
 
-void Init() noexcept {
-    //filled in later for backend binding for each drive
-}
-
 MotionDeviceInterface& GetDevice(MotionDeviceType device) noexcept {
     switch (device) {
         case MotionDeviceType::local:

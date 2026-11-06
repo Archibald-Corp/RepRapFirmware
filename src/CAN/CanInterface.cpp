@@ -1575,6 +1575,23 @@ void CanInterface::Diagnostics(const StringRef& reply) noexcept
 	peakTimeSyncTxDelay = 0;
 	timeSyncMessagesSent = goodTimeStamps = badTimeStamps = 0;
 
+#if DUAL_CAN
+	// The second CAN bus. GetTransport returns null if SecondaryCanBus::Init failed, so this also shows a failure to start.
+	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+	const CanBusProtocol *_ecv_null const protocol = SecondaryCanBus::GetProtocol();
+	if (bus == nullptr || protocol == nullptr)
+	{
+		reply.lcat("Second CAN bus not running");
+	}
+	else
+	{
+		CanTransportStats stats;
+		bus->GetAndClearStats(stats);
+		reply.lcatf("Second CAN bus (%s): queued %u, received %u, lost %u, errs %u, boc %u",
+					protocol->GetName(), stats.messagesQueuedForSending, stats.messagesReceived, stats.messagesLost, stats.protocolErrors, stats.busOffCount);
+	}
+#endif
+
 #if SUPPORT_REMOTE_COMMANDS
 	if (InExpansionMode())
 	{

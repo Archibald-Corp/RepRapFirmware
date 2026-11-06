@@ -11,10 +11,6 @@
 #include <Endstops/ZProbe.h>
 #include <Movement/MotionDevice/MotionDeviceFactory.h>
 
-#if SUPPORT_CAN_EXPANSION
-# include <CAN/CanMotion.h>
-#endif
-
 #if HAS_SBC_INTERFACE
 # include <SBC/SbcInterface.h>
 #endif
