@@ -11,11 +11,17 @@
 #include <Movement/StepTimer.h>
 #include <CAN/Bus/SecondaryCanBus.h>
 #include <CanMessageBuffer.h>
+#include <Platform/Event.h>
+#include <GCodes/GCodes.h>
 
 // Limits for the M569 settings
 constexpr float MinStepsPerRev = 1.0;
 constexpr float MaxStepsPerRev = 1000000.0;			// beyond this, float positions lose whole-step resolution over long moves
 constexpr float MaxTorqueLimit = 100.0;				// N.m; generous ceiling, the real limit is set per motor with T
+
+// Limits on how long a stop can wait, so a dead bus or a stuck task can't hold it up
+constexpr uint32_t EmergencyLockTimeoutMillis = 10;
+constexpr uint32_t StopSendTimeoutMillis = 2;			// for each servo, while waiting for room in the transmit FIFO
 
 // The streaming task. It is created when the first servo is bound, so firmware with no moteus servos configured doesn't run it.
 constexpr size_t MoteusTaskStackWords = 400;			// same as CanSender; check the high-water mark in M122 once it sends messages
@@ -54,16 +60,17 @@ void MoteusMotionDevice::Spin() noexcept {
 		s.drive = drive;
 		const float sign = (s.reverse) ? -1.0 : 1.0;
 		const float newTargetRev = sign * steps/s.stepsPerRev;				// rev = steps / U
-		if (s.hasTarget && positionSets != s.positionSets) {
-			s.offsetRev -= newTargetRev - s.targetRev;		// only RRF's idea of the position changed (G92, homing), so keep the command the same
+		const bool frozen = s.frozen;						// read once: the step interrupt can set it at any time
+		if (s.hasTarget && (frozen || positionSets != s.positionSets)) {
+			s.offsetRev -= newTargetRev - s.targetRev;		// RRF's position changed (G92, homing) or this servo's endstop stopped it, so keep the command the same
 		}
 		s.positionSets = positionSets;
 		s.targetRev = newTargetRev;
-		s.targetRevPerSec = sign * stepsPerClock * (float)StepClockRate/s.stepsPerRev;	// rev/s = steps per clock × clocks per second / U
+		s.targetRevPerSec = (frozen) ? 0.0 : sign * stepsPerClock * (float)StepClockRate/s.stepsPerRev;	// rev/s = steps per clock × clocks per second / U
 		s.hasTarget = true;
 	}
 
-	// Send every servo with an ID its frame, then collect the replies. For now the frame is a query or a stop; stage 7.3 adds position commands.
+	// Send every servo with an ID its frame, then collect the replies. MakeFrame chooses a stop, a position command or a query.
 	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
 	if (bus == nullptr) {
 		return;												// the secondary bus isn't running
@@ -71,23 +78,33 @@ void MoteusMotionDevice::Spin() noexcept {
 	CanMessageBuffer buf;
 	while (bus->Receive(CanRxQueue::fifo0, 0, nullptr)) { }		// discard late replies from the last cycle so we don't match them to this one
 
+	Failure failures[MaxServos];
+	size_t numFailures = 0;
 	size_t expected = 0;
 	for (size_t i = 0; i < numServos; ++i) {
 		Servo& s = servos[i];
 		if (s.awaitingReply) {
 			s.replied = false;								// it didn't answer the last frame in time
+			++s.missedReplies;
 		}
 		s.awaitingReply = false;
+		if (CheckHealth(s, failures[numFailures])) {
+			++numFailures;
+		}
 		if (s.servoId != 0 && bus->IsSpaceAvailable(CanTxSlot::fifo, 0) && MakeFrame(buf, s)) {
 			(void)bus->Send(CanTxSlot::fifo, 0, &buf);
 			s.awaitingReply = true;
 			++expected;
 		} else {
 			s.replied = false;								// nothing went out, so no answer is coming
+			++s.missedReplies;								// a full FIFO means frames aren't getting out, which counts as missing
 		}
 	}
 	updateIntervalMillis = max<uint32_t>(MinUpdateIntervalMillis, expected);	// each servo uses about 0.75 ms of bus time per cycle, so allow 1 ms
 	lock.Release();											// don't hold the table while we sleep, or the main task could wait forever for it
+	for (size_t i = 0; i < numFailures; ++i) {
+		ReportFailure(failures[i]);
+	}
 
 	const uint32_t window = updateIntervalMillis * (StepClockRate/1000) - ReplyMarginClocks;
 	const uint32_t collectStart = StepTimer::GetTimerTicks();
@@ -101,6 +118,7 @@ void MoteusMotionDevice::Spin() noexcept {
 			if (s.awaitingReply && Moteus::ParseReply(buf, s.servoId, s.state)) {
 				s.awaitingReply = false;
 				s.replied = true;
+				s.missedReplies = 0;
 				--expected;
 				if (s.needsAlign && s.hasTarget && !std::isnan(s.state.position)) {
 					s.offsetRev = s.state.position - s.targetRev;	// from here on, targetRev + offsetRev starts from where the servo is now
@@ -122,7 +140,55 @@ bool MoteusMotionDevice::MakeFrame(CanMessageBuffer& buf, Servo& s) noexcept {
 		s.stopPending = false;
 		return true;
 	}
+	if (s.enabled && s.hasTarget && !s.needsAlign && s.maxTorque > 0.0) {
+		return Moteus::MakePosition(buf, s.servoId, s.targetRev + s.offsetRev, s.targetRevPerSec, s.maxTorque, true);
+	}
 	return Moteus::MakeQuery(buf, s.servoId);
+}
+
+// Called once per cycle for each servo, before its next frame, with the table locked. If an enabled servo has faulted or stopped
+// answering, turn it off, fill in failure and return true. It stays off until M17, so it can't jump back into position on its own.
+bool MoteusMotionDevice::CheckHealth(Servo& s, Failure& failure) noexcept {
+	if (!s.enabled || s.servoId == 0) {
+		s.missedReplies = 0;							// only an enabled servo with an ID is expected to answer
+		return false;
+	}
+	const bool faulted = s.replied && (s.state.mode == (uint8_t)Moteus::Mode::fault || s.state.mode == (uint8_t)Moteus::Mode::timeout);
+	if (!faulted && s.missedReplies < MaxMissedReplies) {
+		return false;
+	}
+	s.enabled = false;
+	s.stopPending = true;
+	failure.driver = s.driver;
+	failure.drive = (s.hasTarget) ? s.drive : MaxAxesPlusExtruders;
+	failure.servoId = s.servoId;
+	failure.fault = s.state.fault;
+	failure.notAnswering = !faulted;
+	return true;
+}
+
+// Report a servo that CheckHealth turned off. The event pauses a print and shows the message. Called without the table lock, because this takes other locks.
+void MoteusMotionDevice::ReportFailure(const Failure& failure) noexcept {
+	GCodes& gc = reprap.GetGCodes();
+	if (failure.drive < gc.GetTotalAxes()) {
+		gc.SetAxisNotHomed(failure.drive);				// the plan may have moved on without it, so its position can't be trusted
+	}
+	const uint16_t status = (uint16_t)(1u << StandardDriverStatus::ExternDriverErrorBitPos);	// RRF reads the event parameter as driver status bits
+	if (failure.notAnswering) {
+		(void)Event::AddEvent(EventType::driver_error, status, failure.driver.boardAddress, failure.driver.localDriver,
+								", moteus servo %u not answering", (unsigned int)failure.servoId);
+	} else {
+		(void)Event::AddEvent(EventType::driver_error, status, failure.driver.boardAddress, failure.driver.localDriver,
+								", moteus servo %u fault %u", (unsigned int)failure.servoId, (unsigned int)failure.fault);
+	}
+}
+
+// Send a stop straight away, without going through Spin. The caller holds the servo table lock.
+void MoteusMotionDevice::SendStopNow(CanTransport& bus, const Servo& s) noexcept {
+	CanMessageBuffer buf;
+	if (s.servoId != 0 && bus.IsSpaceAvailable(CanTxSlot::fifo, StopSendTimeoutMillis) && Moteus::MakeStop(buf, s.servoId, false)) {
+		(void)bus.Send(CanTxSlot::fifo, 0, &buf);
+	}
 }
 
 MotionDeviceType MoteusMotionDevice::GetType() const noexcept {
@@ -131,6 +197,14 @@ MotionDeviceType MoteusMotionDevice::GetType() const noexcept {
 
 const char *_ecv_array MoteusMotionDevice::GetName() const noexcept {
 	return "moteus";
+}
+
+// Called when a move is being prepared. Endstop moves are isolated, so any move that froze a servo has ended by now, even if it was aborted.
+// CheckEndstops runs after this during preparation, so an endstop that is already triggered freezes its servo again.
+void MoteusMotionDevice::StartMovement() noexcept {
+	for (size_t i = 0; i < numServos; ++i) {
+		servos[i].frozen = false;
+	}
 }
 
 void MoteusMotionDevice::AddAxisMovement(const PrepParams&, DriverId, int32_t) noexcept {
@@ -151,8 +225,11 @@ void MoteusMotionDevice::EnableDriver(Move&, const CanDriversList& drivers, floa
 		Servo *_ecv_null const s = Find(drivers.GetEntry(i));
 		if (s != nullptr && !s->enabled) {
 			s->enabled = true;
-			s->stopPending = false;
+			s->stopPending = true;						// clear any fault or timeout left from before (e.g. a Duet reset), so CheckHealth sees a fresh state
 			s->needsAlign = true;						// it may have been turned by hand while it was off
+			s->replied = false;							// CheckHealth must only judge replies to frames sent from now on...
+			s->awaitingReply = false;					// ...so a late reply to an older frame isn't taken as one
+			s->missedReplies = 0;
 		}
 	}
 }
@@ -172,9 +249,33 @@ void MoteusMotionDevice::DisableDriver(Move&, const CanDriversList& drivers) noe
 	}
 }
 
-bool MoteusMotionDevice::StopDriver(DriverId, int32_t, bool) noexcept {
-	// TODO step 7: freeze a servo that was stopped by its own endstop
+// Called when this servo's own endstop triggers but others on the axis haven't. This can be in the step interrupt, so no mutex.
+// A single endstop on an axis doesn't come here: RRF stops the plan, and the servo follows it.
+bool MoteusMotionDevice::StopDriver(DriverId driver, int32_t, bool) noexcept {
+	Servo *_ecv_null const s = Find(driver);
+	if (s != nullptr) {
+		s->frozen = true;
+	}
 	return false;										// nothing for the Duet CAN sender to do
+}
+
+// Called by RepRap::EmergencyStop. Sends the stops from here rather than through Spin, so they don't depend on the task being healthy.
+void MoteusMotionDevice::EmergencyStop() noexcept {
+	if (!moteusTask.IsRunning()) {
+		return;											// no servo was bound, or this is a repeat of M112
+	}
+	MutexLocker lock(servoTableMutex, EmergencyLockTimeoutMillis);	// so the task can't end while holding the table; if it's stuck holding it, carry on anyway
+	moteusTask.TerminateAndUnlink();					// nothing can send a command after the stops
+	CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+	if (bus == nullptr) {
+		return;											// the secondary bus isn't running
+	}
+	for (size_t i = 0; i < numServos; ++i) {
+		Servo& s = servos[i];
+		s.enabled = false;
+		s.stopPending = false;
+		SendStopNow(*bus, s);
+	}
 }
 
 // Called by M569.10 P<driver> B"moteus". Creates an entry with nothing set; M569 then fills it in.
@@ -214,6 +315,10 @@ void MoteusMotionDevice::DetachDriver(DriverId driver) noexcept {
 	MutexLocker lock(servoTableMutex);
 	Servo *_ecv_null const s = Find(driver);
 	if (s != nullptr) {
+		CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+		if (s->enabled && bus != nullptr) {
+			SendStopNow(*bus, *s);						// once it's off the table, Spin can't stop it
+		}
 		*s = servos[numServos - 1];						// order doesn't matter: move the last entry into the gap
 		--numServos;
 	}
@@ -277,6 +382,12 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 			reply.catf("%.1f steps/rev", (double)s->stepsPerRev);
 		}
 		reply.catf(", max torque %.2f N.m, %s", (double)s->maxTorque, (s->enabled) ? "enabled" : "disabled");
+		if (s->enabled && s->maxTorque <= 0.0) {
+			reply.cat(" (T not set, so no position commands)");
+		}
+		if (s->frozen) {
+			reply.cat(", stopped by endstop");
+		}
 		if (s->hasTarget) {
 			reply.catf(", planned %.3f rev at %.3f rev/s", (double)s->targetRev, (double)s->targetRevPerSec);
 			if (!s->needsAlign) {

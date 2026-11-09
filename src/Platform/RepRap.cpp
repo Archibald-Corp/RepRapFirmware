@@ -4,6 +4,7 @@
 #include <Devices.h>
 #include <Movement/Move.h>
 #include <Movement/StepTimer.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 #include <FilamentMonitors/FilamentMonitor.h>
 #include <GCodes/GCodes.h>
 #include <Heating/Heat.h>
@@ -1052,6 +1053,7 @@ void RepRap::EmergencyStop() noexcept
 	//platform->SetAtxPower(false);
 
 	move->EmergencyDisableDrivers();				// disable all local drivers - need to do this to ensure that any motor brakes are re-engaged
+	MotionDeviceFactory::ForEachDevice([](MotionDeviceInterface& dev) noexcept { dev.EmergencyStop(); });	// must be before expansion->EmergencyStop, which shuts down the CAN buses
 
 #if SUPPORT_REMOTE_COMMANDS
 	if (!CanInterface::InExpansionMode())

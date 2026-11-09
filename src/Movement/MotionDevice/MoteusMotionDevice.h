@@ -14,12 +14,14 @@ public:
 	static constexpr uint32_t MinUpdateIntervalMillis = 2;	// the shortest time between setpoints for a servo (FreeRTOS ticks are 1 ms)
 	static constexpr uint32_t LeadClocks = StepClockRate * 2/1000;	// sample the plan this far ahead (2 ms), to cover the time to reach the servo
 	static constexpr uint32_t ReplyMarginClocks = StepClockRate/5000;	// stop collecting replies this long before the next cycle is due (0.2 ms)
+	static constexpr uint8_t MaxMissedReplies = 5;			// frames in a row an enabled servo may miss before it counts as lost (about 10 ms at the shortest cycle)
 
 	void Spin() noexcept;									// one streaming cycle, called every GetUpdateIntervalMillis() by the moteus task
 	uint32_t GetUpdateIntervalMillis() const noexcept { return updateIntervalMillis; }
 
 	MotionDeviceType GetType() const noexcept override;
 	const char *_ecv_array GetName() const noexcept override;
+	void StartMovement() noexcept override;
 	void AddAxisMovement(const PrepParams& params, DriverId driver, int32_t delta) noexcept override;
 	void AddExtruderMovement(const PrepParams& params, DriverId driver, motioncalc_t delta, bool usePressureAdvance) noexcept override;
 	void EnableDriver(Move&, const CanDriversList& drivers, float requiredCurrent) noexcept override;
@@ -29,6 +31,7 @@ public:
 	GCodeResult AttachDriver(DriverId driver, const StringRef& reply) noexcept override;
 	void DetachDriver(DriverId driver) noexcept override;
 	bool GetDirection(const Move& move, DriverId driver) const noexcept override;
+	void EmergencyStop() noexcept override;
 
 private:
 	// One bound servo. Settings come from M569 once M569.10 has bound the driver to this backend.
@@ -48,12 +51,26 @@ private:
 		Moteus::ServoState state;			// latest reply: mode, fault, position (rev), velocity, torque, voltage, temperature
 		bool awaitingReply = false;			// a frame went out this cycle and its reply hasn't arrived yet
 		bool replied = false;				// true if the servo answered its latest finished frame
-		bool enabled = false;				// RRF wants this servo holding position (M17 or a move); no effect until position commands are sent
+		bool enabled = false;				// RRF wants this servo holding position (M17 or a move)
 		bool stopPending = false;			// send a stop command in the next cycle
+		volatile bool frozen = false;		// stopped by its own endstop; holds its command until the next move
+		uint8_t missedReplies = 0;			// frames in a row with no answer
+	};
+
+	// A servo that CheckHealth turned off. Reported after the table lock is released, because reporting takes other locks.
+	struct Failure {
+		DriverId driver;
+		size_t drive;						// the logical drive it followed, or MaxAxesPlusExtruders if none
+		uint8_t servoId;
+		uint8_t fault;						// moteus fault code from its latest reply
+		bool notAnswering;					// true if it stopped answering, false if it reported a fault
 	};
 
 	Servo *_ecv_null Find(DriverId driver) noexcept;
 	bool MakeFrame(CanMessageBuffer& buf, Servo& s) noexcept;
+	void SendStopNow(CanTransport& bus, const Servo& s) noexcept;
+	bool CheckHealth(Servo& s, Failure& failure) noexcept;
+	static void ReportFailure(const Failure& failure) noexcept;
 
 	Servo servos[MaxServos];
 	size_t numServos = 0;

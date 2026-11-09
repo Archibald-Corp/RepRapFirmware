@@ -15,6 +15,7 @@
 namespace SecondaryCanBus
 {
 	bool Init(const CanBusProtocol& protocol) noexcept;										// start the bus for this protocol, returning true if successful
+	void Shutdown() noexcept;																// stop the bus, dropping anything still queued; safe to call if it never started
 	CanTransport *_ecv_null GetTransport() noexcept;											// the bus, or null if it is not running
 	const CanBusProtocol *_ecv_null GetProtocol() noexcept;									// the protocol the bus was started for, or null if it is not running
 }

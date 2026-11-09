@@ -48,6 +48,7 @@ public:
 		return GCodeResult::error;
 	}
 	virtual void DetachDriver(DriverId) noexcept { }																			// a driver this backend had was bound elsewhere (default: nothing)
+	virtual void EmergencyStop() noexcept { }																					// stop everything this backend drives, now; called from a task, never an ISR (default: nothing)
 };
 
 #endif /*SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEINTERFACE_H_*/

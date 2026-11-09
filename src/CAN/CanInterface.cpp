@@ -324,6 +324,9 @@ void CanInterface::Shutdown() noexcept
 	canReceiverTask.TerminateAndUnlink();
 
 	can0.DeInit();
+#if DUAL_CAN
+	SecondaryCanBus::Shutdown();
+#endif
 }
 
 CanAddress CanInterface::GetCanAddress() noexcept

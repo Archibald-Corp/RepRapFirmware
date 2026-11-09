@@ -54,6 +54,12 @@ bool SecondaryCanBus::Init(const CanBusProtocol& protocol) noexcept
 	return true;
 }
 
+void SecondaryCanBus::Shutdown() noexcept
+{
+	can1Transport.DeInit();
+	currentProtocol = nullptr;
+}
+
 CanTransport *_ecv_null SecondaryCanBus::GetTransport() noexcept
 {
 	return (can1Transport.IsActive()) ? &can1Transport : nullptr;
