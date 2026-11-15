@@ -47,6 +47,10 @@ void MoteusMotionDevice::Spin() noexcept {
 		Servo& s = servos[i];
 		size_t drive;
 		if (s.stepsPerRev <= 0.0 || !move.GetLogicalDriveOfDriver(s.driver, drive)) {
+			if (s.hasTarget && s.enabled) {
+				s.enabled = false;							// M584 took it off its axis: stop it rather than leave it holding
+				s.stopPending = true;
+			}
 			s.hasTarget = false;							// not configured yet: nothing to follow
 			s.needsAlign = true;							// when it comes back, the old offset won't apply
 			continue;
@@ -354,6 +358,13 @@ GCodeResult MoteusMotionDevice::ConfigureDriver(Move&, DriverId driver, GCodeBuf
 							 (unsigned int)id, servos[i].driver.boardAddress, servos[i].driver.localDriver);
 				return GCodeResult::error;
 			}
+		}
+		if (s->enabled && s->servoId != 0 && s->servoId != id) {
+			CanTransport *_ecv_null const bus = SecondaryCanBus::GetTransport();
+			if (bus != nullptr) {
+				SendStopNow(*bus, *s);						// the old ID won't get frames any more
+			}
+			s->enabled = false;								// M17 brings up the new ID cleanly
 		}
 		s->servoId = (uint8_t)id;
 		s->needsAlign = true;
