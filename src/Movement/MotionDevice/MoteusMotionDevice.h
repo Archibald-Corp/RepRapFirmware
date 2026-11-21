@@ -34,7 +34,7 @@ public:
 	void EmergencyStop() noexcept override;
 
 private:
-	// One bound servo. Settings come from M569 once M569.10 has bound the driver to this backend.
+	// One bound servo. Settings come from M569 once M960 has bound the driver to this backend.
 	struct Servo {
 		DriverId driver;					// the RRF driver number, e.g. 100.1
 		uint8_t servoId = 0;				// M569 I: moteus CAN ID, 1-127 (0 = not set yet)

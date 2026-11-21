@@ -10,7 +10,7 @@ namespace MotionDeviceFactory {
     MotionDeviceInterface& GetDevice(MotionDeviceType) noexcept;
     bool IsHandledBy(DriverId driver, MotionDeviceType type) noexcept;										// true if driver's backend (ResolveDriver) is of this type
     void ForEachDevice(function_ref_noexcept<void(MotionDeviceInterface&) noexcept> func) noexcept;		// call func on every backend built into this firmware
-    GCodeResult ConfigureBinding(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);			// M569.10: bind a driver number to a backend by name
+    GCodeResult ConfigureBinding(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);			// M960: bind a driver number to a backend by name
 }
 
 #endif /* SRC_MOVEMENT_MOTIONDEVICE_MOTIONDEVICEFACTORY_H_ */ 

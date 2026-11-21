@@ -282,7 +282,7 @@ void MoteusMotionDevice::EmergencyStop() noexcept {
 	}
 }
 
-// Called by M569.10 P<driver> B"moteus". Creates an entry with nothing set; M569 then fills it in.
+// Called by M960 P<driver> B"moteus". Creates an entry with nothing set; M569 then fills it in.
 GCodeResult MoteusMotionDevice::AttachDriver(DriverId driver, const StringRef& reply) noexcept {
 	if (!driver.IsRemote()) {
 		reply.copy("a moteus servo needs a driver number on an unused board address, e.g. P100.1");

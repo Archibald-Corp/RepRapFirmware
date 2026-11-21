@@ -40,7 +40,7 @@ static CanMotionDevice canDevice;
 static MoteusMotionDevice moteusDevice;
 #endif
 
-// Drivers handed to a backend by M569.10. Any driver not listed uses its default backend (DefaultDevice).
+// Drivers handed to a backend by M960. Any driver not listed uses its default backend (DefaultDevice).
 struct DriverBinding {
     DriverId driver;
     MotionDeviceType type;
@@ -113,7 +113,7 @@ void ForEachDevice(function_ref_noexcept<void(MotionDeviceInterface&) noexcept> 
 #endif
 }
 
-// M569.10 P<driver> B"<backend>": hand a driver number to a backend, e.g. B"moteus".
+// M960 P<driver> B"<backend>": hand a driver number to a backend, e.g. B"moteus".
 // Naming the driver's default backend (B"local" or B"can") removes the binding. Without B, report the driver's backend.
 GCodeResult ConfigureBinding(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException) {
     gb.MustSee('P');

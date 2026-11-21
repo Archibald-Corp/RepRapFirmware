@@ -18,6 +18,7 @@
 #endif
 
 #include <Movement/Move.h>
+#include <Movement/MotionDevice/MotionDeviceFactory.h>
 
 #include <PrintMonitor/PrintMonitor.h>
 #include <Platform/RepRap.h>
@@ -4634,6 +4635,10 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				result = reprap.GetExpansion().ConfigureConnectionTimeout(gb, reply);
 				break;
 #endif
+
+			case 960:	// hand a driver number to a motion backend, e.g. M960 P100.1 B"moteus" (the text parser reads only one fractional digit, so this can't be M569.10)
+				result = MotionDeviceFactory::ConfigureBinding(gb, reply);
+				break;
 
 #if SUPPORT_PHASE_STEPPING
 			case 970:	// configure step mode (phase stepping)
